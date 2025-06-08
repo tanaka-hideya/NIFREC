@@ -10,3 +10,4 @@ dependencies:
 - periodictable
 - morfeus-ml
 - xtb
+- setuptools=79.0.1
