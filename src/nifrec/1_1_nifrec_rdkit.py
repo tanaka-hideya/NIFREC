@@ -79,8 +79,8 @@ if __name__ == '__main__':
     thres = 1
     
     # Enter the file paths
-    file_path_input = f'{fd}/input_smiles.csv'
-    file_path_output = f'{fd}/rdkit_stats.csv'
+    file_path_input     = f'{fd}/input_smiles.csv'
+    file_path_output    = f'{fd}/rdkit_stats.csv'
     # =============================================
     
     sys.stdout = open(f'{fd}/log_rdkit.txt', 'w')

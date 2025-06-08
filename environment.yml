@@ -1,0 +1,12 @@
+name: nifrec
+channels:
+- conda-forge
+dependencies:
+- python >= 3.12
+- rdkit >= 2024.09.03
+- numpy
+- cclib=1.8.1
+- joblib
+- periodictable
+- morfeus-ml
+- xtb
