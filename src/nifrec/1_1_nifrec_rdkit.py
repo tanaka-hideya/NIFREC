@@ -1,7 +1,7 @@
 """
-File: 1_1_nifrec_rdkit.py
+File: nifrec_rdkit.py
 Author: Hideya Tanaka at Nara Institute of Science and Technology
-Supervised by: Tomoyuki Miyao
+Supervised by: Tomoyuki Miyao at Nara Institute of Science and Technology
 Description:
     This script performs the conformer generation using RDKit.
 """
@@ -11,17 +11,35 @@ import numpy as np
 import pandas as pd
 from joblib import delayed, Parallel, cpu_count
 from morfeus.conformer import ConformerEnsemble
-from utility_opt import MakeFolder, SmilesToCanSmiles, WriteMolsSDF
+from rdkit import Chem
 import sys
+from pathlib import Path
 
-def process_rows_for_rdkit(fd, file_path_input, file_path_output, n_confs, thres, njobs=-1,  backend='loky',smicol='smiles', idxcol=0):
-    outfd       = MakeFolder(f'{fd}/rdkit', allow_override=True) 
+
+def smiles_to_canonical(smi: str):
+    if (smi is None) or (smi == ''):
+        return None
+    mol = Chem.MolFromSmiles(smi)
+    if mol is None:
+        return None
+    else:
+        return Chem.MolToSmiles(mol) # canonical smiles are generated
+
+
+def write_mols_to_sdf(mol_list, sdf_name):  
+    w = Chem.SDWriter(sdf_name)
+    for mol in mol_list:
+        w.write(mol)
+    w.close()
+
+
+def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, thres, njobs=-1,  backend='loky',smicol='smiles', idxcol=0):
     original_df = pd.read_csv(file_path_input, index_col=idxcol)
     print(f'Loaded mols: {len(original_df)}')
     df = original_df.copy()
     
     # Remove duplicates
-    df[smicol] = original_df[smicol].apply(SmilesToCanSmiles)
+    df[smicol] = original_df[smicol].apply(smiles_to_canonical)
     df.drop_duplicates(subset=smicol, inplace=True)
     print(f'Loaded mols after removing duplicates: {len(df)}')
     
@@ -32,15 +50,18 @@ def process_rows_for_rdkit(fd, file_path_input, file_path_output, n_confs, thres
     random_seed = 42
     
     # Both sdf and xyz are necessary to reproduce molecule after coordinate optimization.
-    outfd_xyz = MakeFolder(f'{outfd}/xyz', allow_override=True)
-    outfd_sdf = MakeFolder(f'{outfd}/sdf', allow_override=True)
+    outfd_xyz = f'{outfd}/xyz'
+    outfd_sdf = f'{outfd}/sdf'
+    os.makedirs(outfd_xyz)
+    os.makedirs(outfd_sdf)
     status_df_list = Parallel(n_jobs=njobs, backend=backend)([delayed(generate_conf_rdkit)(wid, batch[smicol], n_confs, random_seed, thres, outfd_xyz, outfd_sdf, outfd) for wid, batch in enumerate(batch_df)])
     status_df = pd.concat(status_df_list)
     combined_df = pd.concat([original_df, status_df], ignore_index=False, axis=1)
     if combined_df[smicol].equals(combined_df['smiles_input_rdkit_confgen']):
         combined_df = combined_df.drop(columns='smiles_input_rdkit_confgen')
         print('success: combine')
-    combined_df.to_csv(f'{fd}/{file_path_output}')
+    combined_df.to_csv(f'{outfd}/{file_path_output}')
+
 
 def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xyz, outfd_sdf, outfd):
     ntotal = len(pds_smiles)
@@ -59,7 +80,7 @@ def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xy
             # Save mol to connectivity information.
             rdmol = ce.mol
             rdmol.SetProp('_Name', str(number))
-            WriteMolsSDF([rdmol], f'{outfd_sdf}/rdkit2d_{number}.sdf')            
+            write_mols_to_sdf([rdmol], f'{outfd_sdf}/rdkit2d_{number}.sdf')            
             status_dict[number] = {'smiles_input_rdkit_confgen': smiles, 'success_rdkit_confgen': True, 'nconfs_rdkit_confgen': n_conformer}
         except:
             print(f'Fail RDkit conformation generation process: {idx}: {smiles}')
@@ -67,35 +88,36 @@ def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xy
     return pd.DataFrame.from_dict(status_dict, orient='index')
 
 
-if __name__ == '__main__':
+def _parse_cli_args(argv=None):
 
     parser = argparse.ArgumentParser(
                         prog='nifrec_rdkit',
                         description= 'Conformer generator using RDKit'
     )
+    parser.add_argument('--outfolder-rdkit',
+                     help='Output folder where conformers are stored',
+                     type=str,
+                     required=True,
+                     )
     parser.add_argument('--infile',
                      help='Input csv filename',
-                     type=str
+                     type=str,
+                     required=True,
                      )
     parser.add_argument('--smicol',
-                     help='Smiles column for structure generation',
+                     help='Smiles column for structure generation in input csv file',
                      type=str,
                      default='smiles'
                      )
     parser.add_argument('--idxcol',
-                     help='Index column idx (0 starts)',
+                     help='Index column idx in input csv file (0 starts)',
                      type=int,
                      default=0
                      )
-    parser.add_argument('--outfolder',
-                     help='Output folder where conformers are stored',
-                     type=str,
-                     default='rdkit-confgen'
-                     )
     parser.add_argument('--outfile',
-                     help='Output csv filename without extension (i.e. csv)',
+                     help='Output csv filename',
                      type=str,
-                     default='rdkit_stats'
+                     default='rdkit_stats.csv',
                      )
     parser.add_argument('--nconfs',
                      help='Number of maximum conformers to be generated',
@@ -108,20 +130,28 @@ if __name__ == '__main__':
                      default=1,
                      )
     parser.add_argument('--njobs',
-                     help='Number of parallel computation threads (-1 means all cores)',
+                     help='Number of parallel computation threads (-1 means "all cores - 1")',
                      type=int,
                      default=-1,
                      )
     parser.add_argument('--backend',
-                     help='Parallel computation backend (loky or multithprocessing)',
+                     help='Parallel computation backend (loky or multiprocessing)',
                      type=str,
                      default='loky',
                      )
-    p = parser.parse_args(sys.argv[1:])
+    return parser.parse_args(argv)
 
-    fd = p.outfolder
-    fd = MakeFolder(fd, allow_override=True)
-    sys.stdout = open(f'{fd}/log_rdkit.txt', 'w')
-    process_rows_for_rdkit(fd, p.infile, p.outfile, p.nconfs, p.rmsd_thres, njobs=p.njobs, backend=p.backend,smicol=p.smicol)
+
+def main(argv=None):
+    args = _parse_cli_args(argv)
+    outfd = str(Path(args.outfolder_rdkit).expanduser().resolve())
+    infile = str(Path(args.infile).expanduser().resolve())
+    os.makedirs(outfd)
+    sys.stdout = open(f'{outfd}/log_rdkit.txt', 'w')
+    process_rows_for_rdkit(outfd, infile, args.outfile, args.nconfs, args.rmsd_thres, njobs=args.njobs, backend=args.backend, smicol=args.smicol, idxcol=args.idxcol)
     print('Finish')
     sys.stdout.close()
+    
+    
+if __name__ == '__main__':
+    main()
