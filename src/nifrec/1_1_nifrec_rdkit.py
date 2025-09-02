@@ -65,9 +65,11 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     # Both sdf and xyz are necessary to reproduce molecule after coordinate optimization.
     outfd_xyz = f'{outfd}/xyz'
     outfd_sdf = f'{outfd}/sdf'
+    outfd_worker = f'{outfd}/worker'
     os.makedirs(outfd_xyz)
     os.makedirs(outfd_sdf)
-    status_df_list = Parallel(n_jobs=njobs, backend=backend)([delayed(generate_conf_rdkit)(wid, batch[smicol], n_confs, random_seed, thres, outfd_xyz, outfd_sdf, outfd) for wid, batch in enumerate(batch_df)])
+    os.makedirs(outfd_worker)
+    status_df_list = Parallel(n_jobs=njobs, backend=backend)([delayed(generate_conf_rdkit)(wid, batch[smicol], n_confs, random_seed, thres, outfd_xyz, outfd_sdf, outfd_worker) for wid, batch in enumerate(batch_df)])
     status_df = pd.concat(status_df_list)
     combined_df = pd.concat([original_df, status_df], ignore_index=False, axis=1)
     if combined_df[smicol].equals(combined_df['smiles_input_rdkit_confgen']):
@@ -76,10 +78,7 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     combined_df.to_csv(f'{outfd}/{file_path_output}')
 
 
-def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xyz, outfd_sdf, outfd):
-    outfd_worker = f'{outfd}/worker'
-    os.makedirs(outfd_worker)
-    
+def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xyz, outfd_sdf, outfd_worker):
     ntotal = len(pds_smiles)
     status_dict = dict()
     for idx, (number,smiles) in enumerate(pds_smiles.items()):
