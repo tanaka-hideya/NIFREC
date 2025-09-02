@@ -95,47 +95,49 @@ def _parse_cli_args(argv=None):
                         description= 'Conformer generator using RDKit'
     )
     parser.add_argument('--outfolder-rdkit',
-                     help='Output folder where conformers are stored',
+                     help="Output folder to write RDKit results (XYZ and SDF files, logs). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
                      type=str,
                      required=True,
                      )
     parser.add_argument('--infile',
-                     help='Input csv filename',
+                     help="Path to the input CSV file. Accepts absolute or relative paths; '~' is expanded. Must contain a SMILES column specified by --smicol.",
                      type=str,
                      required=True,
                      )
     parser.add_argument('--smicol',
-                     help='Smiles column for structure generation in input csv file',
+                     help='Name of the column in the input CSV that contains SMILES strings (used for structure generation).',
                      type=str,
                      default='smiles'
                      )
     parser.add_argument('--idxcol',
-                     help='Index column idx in input csv file (0 starts)',
+               help=('Zero-based index of the column in the input CSV to use as the unique molecule identifier (DataFrame index). '
+                   'Identifiers must be unique per molecule and are used consistently across all outputs: the output CSV (--outfile) '
+                   'and the filenames of 3D structure files (XYZ/SDF). Non-unique values may cause file overwrites and inconsistent results.'),
                      type=int,
                      default=0
                      )
     parser.add_argument('--outfile',
-                     help='Output csv filename',
+                     help='Name of the output CSV file to write summary (saved under --outfolder-rdkit).',
                      type=str,
                      default='rdkit_stats.csv',
                      )
     parser.add_argument('--nconfs',
-                     help='Number of maximum conformers to be generated',
+                     help='Maximum number of RDKit conformers to generate per molecule.',
                      type=int,
                      default=20,
                      )
     parser.add_argument('--rmsd-thres',
-                     help='RMSD threshold between generated conformers',
+                     help='RMSD pruning threshold between generated conformers.',
                      type=float,
                      default=1,
                      )
     parser.add_argument('--njobs',
-                     help='Number of parallel computation threads (-1 means "all cores - 1")',
+                     help='Number of parallel workers. If <= 0, uses (CPU cores - 1).',
                      type=int,
                      default=-1,
                      )
     parser.add_argument('--backend',
-                     help='Parallel computation backend (loky or multiprocessing)',
+                     help="Parallel backend for joblib. One of: 'loky' (default), 'multiprocessing', 'threading'.",
                      type=str,
                      default='loky',
                      )
