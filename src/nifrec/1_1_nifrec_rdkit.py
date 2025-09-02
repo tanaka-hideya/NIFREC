@@ -33,7 +33,20 @@ def write_mols_to_sdf(mol_list, sdf_name):
     w.close()
 
 
-def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, thres, njobs=-1,  backend='loky',smicol='smiles', idxcol=0):
+def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, thres, njobs=-1, backend='loky', smicol='smiles', idxcol=0):
+    print(f'Conformer generation using RDKit')
+    print('========== Settings ==========')
+    print(f'outfolder-rdkit: {outfd}')
+    print(f'infile: {file_path_input}')
+    print(f'smicol: {smicol}')
+    print(f'idxcol: {idxcol}')
+    print(f'outfile: {file_path_output}')
+    print(f'nconfs: {n_confs}')
+    print(f'rmsd-thres: {thres}')
+    print(f'njobs: {njobs}')
+    print(f'backend: {backend}')
+    print('------------------------------')
+    
     original_df = pd.read_csv(file_path_input, index_col=idxcol)
     print(f'Loaded mols: {len(original_df)}')
     df = original_df.copy()
@@ -64,10 +77,13 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
 
 
 def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xyz, outfd_sdf, outfd):
+    outfd_worker = f'{outfd}/worker'
+    os.makedirs(outfd_worker)
+    
     ntotal = len(pds_smiles)
     status_dict = dict()
     for idx, (number,smiles) in enumerate(pds_smiles.items()):
-        with open(f'{outfd}/log_rdkit_worker_{workerid}.txt', 'w') as f:
+        with open(f'{outfd_worker}/log_rdkit_worker_{workerid}.txt', 'w') as f:
             print(f'Processing {idx+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
 
         try:
@@ -92,7 +108,7 @@ def _parse_cli_args(argv=None):
 
     parser = argparse.ArgumentParser(
                         prog='nifrec_rdkit',
-                        description= 'Conformer generator using RDKit'
+                        description='Conformer generator using RDKit',
     )
     parser.add_argument('--outfolder-rdkit',
                      help="Output folder to write RDKit results (XYZ and SDF files, logs). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
@@ -107,14 +123,14 @@ def _parse_cli_args(argv=None):
     parser.add_argument('--smicol',
                      help='Name of the column in the input CSV that contains SMILES strings (used for structure generation).',
                      type=str,
-                     default='smiles'
+                     default='smiles',
                      )
     parser.add_argument('--idxcol',
                help=('Zero-based index of the column in the input CSV to use as the unique molecule identifier (DataFrame index). '
                    'Identifiers must be unique per molecule and are used consistently across all outputs: the output CSV (--outfile) '
                    'and the filenames of 3D structure files (XYZ/SDF). Non-unique values may cause file overwrites and inconsistent results.'),
                      type=int,
-                     default=0
+                     default=0,
                      )
     parser.add_argument('--outfile',
                      help='Name of the output CSV file to write summary (saved under --outfolder-rdkit).',
