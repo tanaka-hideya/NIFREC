@@ -107,7 +107,7 @@ def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xy
             write_mols_to_sdf([rdmol], f'{outfd_sdf}/rdkit2d_{number}.sdf')            
             status_dict[number] = {'smiles_input_rdkit_confgen': smiles, 'success_rdkit_confgen': True, 'nconfs_rdkit_confgen': n_conformer}
         except:
-            print(f'Fail RDkit conformation generation process: {idx}: {smiles}')
+            print(f'Fail RDKit conformation generation process: {idx}: {smiles}')
             status_dict[number] = {'smiles_input_rdkit_confgen': smiles, 'success_rdkit_confgen': False, 'nconfs_rdkit_confgen': None}
     return pd.DataFrame.from_dict(status_dict, orient='index')
 
