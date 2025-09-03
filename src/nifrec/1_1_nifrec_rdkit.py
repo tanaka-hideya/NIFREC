@@ -74,7 +74,7 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     combined_df = pd.concat([original_df, status_df], ignore_index=False, axis=1)
     if combined_df[smicol].equals(combined_df['smiles_input_rdkit_confgen']):
         combined_df = combined_df.drop(columns='smiles_input_rdkit_confgen')
-        print('success: RDKit')
+        print('RDKit conformer generation completed.')
     
     # Harmonize SMILES column name to 'smiles' for output, unless it already exists.
     # This avoids duplicate or conflicting columns in the final CSV.
