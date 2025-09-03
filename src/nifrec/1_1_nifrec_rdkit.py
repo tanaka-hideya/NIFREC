@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 
-def smiles_to_canonical(smi: str):
+def smiles_to_canonical(smi):
     if (smi is None) or (smi == ''):
         return None
     mol = Chem.MolFromSmiles(smi)
@@ -74,7 +74,16 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     combined_df = pd.concat([original_df, status_df], ignore_index=False, axis=1)
     if combined_df[smicol].equals(combined_df['smiles_input_rdkit_confgen']):
         combined_df = combined_df.drop(columns='smiles_input_rdkit_confgen')
-        print('success: combine')
+        print('success: RDKit')
+    
+    # Harmonize SMILES column name to 'smiles' for output, unless it already exists.
+    # This avoids duplicate or conflicting columns in the final CSV.
+    if smicol != 'smiles':
+        if 'smiles' in combined_df.columns:
+            print(f"Column 'smiles' already exists; skip renaming '{smicol}' to 'smiles'.")
+        else:
+            combined_df = combined_df.rename(columns={smicol: 'smiles'})
+            print(f"Renamed column '{smicol}' to 'smiles' for output consistency.")
     combined_df.to_csv(f'{outfd}/{file_path_output}')
 
 
@@ -132,7 +141,9 @@ def _parse_cli_args(argv=None):
                      default=0,
                      )
     parser.add_argument('--outfile',
-                     help='Name of the output CSV file to write summary (saved under --outfolder-rdkit).',
+               help=("Name of the output CSV file to write summary (saved under --outfolder-rdkit). "
+                   "Note: If the SMILES column specified by --smicol is not named 'smiles', it will be renamed to 'smiles' in the output CSV "
+                   "(unless a 'smiles' column already exists)."),
                      type=str,
                      default='rdkit_stats.csv',
                      )
