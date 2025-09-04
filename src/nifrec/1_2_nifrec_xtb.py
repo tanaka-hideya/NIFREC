@@ -17,7 +17,8 @@ from utility_opt import MakeFolder
 import sys
 from pathlib import Path
 
-def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=100):
+
+def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=100, imagfreq_thres=5.0):
     if namespace is None:
         namespace = ''
 
@@ -44,7 +45,7 @@ def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd,
     # Handle small imaginary frequencies
     for iteration in range(max_iterations):
         if os.path.exists(output_json):
-            is_stable, total_energy = check_vibrational_frequencies_and_energy(output_json)
+            is_stable, total_energy = check_vibrational_frequencies_and_energy(output_json, imagfreq_thres)
             if not is_stable and os.path.exists(output_hessxyz):
                 if not run_xtb_command(output_hessxyz, charge, namespace, fname):
                     return None
@@ -58,7 +59,7 @@ def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd,
     outfname = fname.replace('rdkit','xTB')
     
     if os.path.exists(output_json):
-        is_stable, total_energy = check_vibrational_frequencies_and_energy(output_json)
+        is_stable, total_energy = check_vibrational_frequencies_and_energy(output_json, imagfreq_thres)
         if is_stable:
             new_xyz_path = f'{outfd}/{outfname}'
             new_json_path = new_xyz_path.replace('.xyz', '.json')
@@ -83,7 +84,7 @@ def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd,
 
     return new_json_path
 
-def check_vibrational_frequencies_and_energy(json_file):
+def check_vibrational_frequencies_and_energy(json_file, imagfreq_thres=5.0):
     if json_file is None:
         return False, None
     
@@ -94,18 +95,17 @@ def check_vibrational_frequencies_and_energy(json_file):
             print(f'loading json file failed: {json_file}')
             return False, None
 
-    frequencies = data['vibrational frequencies/rcm']
+    frequencies = data['vibrational frequencies / rcm']
     total_energy = data['total energy']
 
     # Check imaginary freq (ignore small freq)
     # The threshold of 5.0 was determined by referring to the official documentation of xTB.
-    significant_frequencies = [freq for freq in frequencies if abs(freq) > 5.0]
+    significant_frequencies = [freq for freq in frequencies if abs(freq) > imagfreq_thres]
     has_imaginary_frequencies = any(freq < 0 for freq in significant_frequencies)
 
     return not has_imaginary_frequencies, total_energy
 
-def process_rows_for_xtb(fd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf, max_repeat=100, imagfreq_thres=5.0, njobs=-1, backend='loky'):
-    outfd = MakeFolder(f'{fd}/xTB', allow_override=True)
+def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf, max_repeat=100, imagfreq_thres=5.0, njobs=-1, backend='loky'):
     df = pd.read_csv(file_path_input, index_col=0)
     print(f'Total molecules (before rdkit optimization) {len(df)}')
     
@@ -129,7 +129,7 @@ def process_rows_for_xtb(fd, file_path_input, rdkitxyzfd, file_path_output_all, 
     # xTB calculation
     status_all_df_list = []
     status_min_df_list = []
-    results = Parallel(n_jobs=njobs, backend='loky')([delayed(run_xtb_multi_files)(wid, batch, max_nconf, max_repeat, rdkitxyzfd, outfd) for wid, batch in enumerate(batches)])
+    results = Parallel(n_jobs=njobs, backend=backend)([delayed(run_xtb_multi_files)(wid, batch, max_nconf, max_repeat, rdkitxyzfd, outfd, imagfreq_thres) for wid, batch in enumerate(batches)])
     for status_all, status_min in results:
         status_all_df_list.append(status_all)
         status_min_df_list.append(status_min)
@@ -141,13 +141,13 @@ def process_rows_for_xtb(fd, file_path_input, rdkitxyzfd, file_path_output_all, 
     if combined_df[smicol].equals(combined_df['smiles_xTB']):
         combined_df = combined_df.drop(columns='smiles_xTB')
         print('success: combine')
-    combined_df.to_csv(file_path_output_min)
+    combined_df.to_csv(f'{outfd}/{file_path_output_min}')
     
     print(f'Total molecules ({file_path_output_min}) {len(combined_df)}')
     combined_df = combined_df[combined_df['confid'] != 0]
     print(f'Total molecules (xTB,success) {len(combined_df)}')
 
-def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd):
+def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd, imagfreq_thres):
     optoutfd = MakeFolder(f'{outfd}/opt', allow_override=True)
     imagfreqoutfd = MakeFolder(f'{outfd}/imag_freq', allow_override=True)
     workingfd   = MakeFolder(f'{outfd}/working', allow_override=True)
@@ -177,15 +177,15 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd):
             if not os.path.exists(xyz_file_path):
                 raise ValueError(f'xyz file: {xyz_file_path} does not exists. Raise exception.')
             # Run xTB
-            json_path = run_xtb_optimization_and_vibration_handle_imagfreq(xyz_file_path, charge, optoutfd, imagfreqoutfd, f'id{workerid}', max_repeat)
+            json_path = run_xtb_optimization_and_vibration_handle_imagfreq(xyz_file_path, charge, optoutfd, imagfreqoutfd, f'id{workerid}', max_repeat, imagfreq_thres)
             
-            is_stable, total_energy = check_vibrational_frequencies_and_energy(json_path)
+            is_stable, total_energy = check_vibrational_frequencies_and_energy(json_path, imagfreq_thres)
 
             # Save generation information
             gen_xyz_path  = json_path.replace('.json', '.xyz') if json_path is not None else '' 
             status_all_dict[f'{number}_{confid}'] = {'smiles': smiles,
                                         'no imaginary Freq': is_stable,
-                                        'total_energy': total_energy,
+                                        'total_energy_xTB': total_energy,
                                         'filepath': gen_xyz_path}
 
             if is_stable and (total_energy < emin_val):
@@ -195,7 +195,7 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd):
 
         status_min_dict[number] = {'smiles_xTB': smiles,
                                     'confid': emin_cidx,
-                                    'total_energy': emin_val,
+                                    'total_energy_xTB': emin_val,
                                     'filepath': os.path.basename(emin_xyz_path)}
         
     os.chdir(pwd_prev) # set back the previous folder
@@ -206,7 +206,7 @@ def _parse_cli_args(argv=None):
 
     parser = argparse.ArgumentParser(
                         prog='nifrec_xtb',
-                        description='Conformer optimization using xTB',
+                        description='Conformer optimization and vibrational analysis using xTB, with automatic handling of small imaginary frequencies.',
     )
     parser.add_argument('--outfolder-xtb',
                      help="Output folder to write xTB results (XYZ files, logs). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
@@ -214,12 +214,12 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--infolder-rdkit',
-                     help="Input folder to load RDKit results (XYZ files). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
+                     help="Input folder to load RDKit results (XYZ files). Accepts absolute or relative paths; '~' is expanded.",
                      type=str,
                      required=True,
                      )
     parser.add_argument('--infile',
-                     help="Name of the input CSV file (RDKit summary) (saved under --infolder-rdkit). ",
+                     help="Name of the input CSV file (RDKit summary) located under --infolder-rdkit.",
                      type=str,
                      default='rdkit_stats.csv',
                      )
@@ -239,14 +239,18 @@ def _parse_cli_args(argv=None):
                      default=20,
                      )
     parser.add_argument('--max-repeat',
-               help=("Positive integer that sets the upper limit on the number of"
-                   "iterative displacements applied when residual imaginary frequencies "
-                   "persist after the xTB optimization."),
+                help=("Upper bound on iterations to resolve residual imaginary frequencies after xTB optimization "
+                    "by following the distorted structure."
+                    " Larger values allow more retries; set small to limit runtime (positive integer)."),
                      type=int,
                      default=50,
                      )
     parser.add_argument('--imagfreq-thres',
-                     help='',
+               help=("Threshold in cm^-1 to ignore near-zero vibrational modes when detecting imaginary frequencies. "
+                   "Modes with |freq| <= threshold are treated as numerical noise. "
+                   "Negative modes with |freq| > threshold are considered imaginary. "
+                   "Applies both to the iterative re-optimization and final classification. "
+                   "Default 5.0 cm^-1."),
                      type=float,
                      default=5.0,
                      )
