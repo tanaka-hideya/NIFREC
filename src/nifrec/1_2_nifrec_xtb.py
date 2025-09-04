@@ -5,7 +5,7 @@ Supervised by: Tomoyuki Miyao
 Description:
     This script performs the optimization using xTB.
 """
-
+import argparse
 import os
 import subprocess
 import numpy as np
@@ -15,6 +15,7 @@ import json
 from joblib import cpu_count, delayed, Parallel
 from utility_opt import MakeFolder
 import sys
+from pathlib import Path
 
 def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=100):
     if namespace is None:
@@ -103,7 +104,7 @@ def check_vibrational_frequencies_and_energy(json_file):
 
     return not has_imaginary_frequencies, total_energy
 
-def process_rows_for_xtb(fd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf, max_repeat=100, njobs=-1):
+def process_rows_for_xtb(fd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf, max_repeat=100, imagfreq_thres=5.0, njobs=-1, backend='loky'):
     outfd = MakeFolder(f'{fd}/xTB', allow_override=True)
     df = pd.read_csv(file_path_input, index_col=0)
     print(f'Total molecules (before rdkit optimization) {len(df)}')
@@ -200,29 +201,81 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd):
     os.chdir(pwd_prev) # set back the previous folder
     return pd.DataFrame.from_dict(status_all_dict, orient='index'), pd.DataFrame.from_dict(status_min_dict, orient='index')
 
-if __name__ == '__main__':
-    fd = os.path.dirname(os.path.abspath(__file__))
+
+def _parse_cli_args(argv=None):
+
+    parser = argparse.ArgumentParser(
+                        prog='nifrec_xtb',
+                        description='Conformer optimization using xTB',
+    )
+    parser.add_argument('--outfolder-xtb',
+                     help="Output folder to write xTB results (XYZ files, logs). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
+                     type=str,
+                     required=True,
+                     )
+    parser.add_argument('--infolder-rdkit',
+                     help="Input folder to load RDKit results (XYZ files). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
+                     type=str,
+                     required=True,
+                     )
+    parser.add_argument('--infile',
+                     help="Name of the input CSV file (RDKit summary) (saved under --infolder-rdkit). ",
+                     type=str,
+                     default='rdkit_stats.csv',
+                     )
+    parser.add_argument('--outfile',
+                     help='Name of the output CSV file to write summary (saved under --outfolder-xtb).',
+                     type=str,
+                     default='xTB_stats_Emin.csv',
+                     )
+    parser.add_argument('--outfile-allresults',
+                     help='Name of the output CSV file to write all results (saved under --outfolder-xtb).',
+                     type=str,
+                     default='xTB_stats_all.csv',
+                     )
+    parser.add_argument('--max-nconfs',
+                     help='Maximum number of conformers to be optimized with xTB per molecule',
+                     type=int,
+                     default=20,
+                     )
+    parser.add_argument('--max-repeat',
+               help=("Positive integer that sets the upper limit on the number of"
+                   "iterative displacements applied when residual imaginary frequencies "
+                   "persist after the xTB optimization."),
+                     type=int,
+                     default=50,
+                     )
+    parser.add_argument('--imagfreq-thres',
+                     help='',
+                     type=float,
+                     default=5.0,
+                     )
+    parser.add_argument('--njobs',
+                     help='Number of parallel workers. If <= 0, uses (CPU cores - 1).',
+                     type=int,
+                     default=-1,
+                     )
+    parser.add_argument('--backend',
+                     help="Parallel backend for joblib. One of: 'loky' (default), 'multiprocessing', 'threading'.",
+                     type=str,
+                     default='loky',
+                     )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = _parse_cli_args(argv)
+    outfd = str(Path(args.outfolder_xtb).expanduser().resolve())
+    rdkitfd = str(Path(args.infolder_rdkit).expanduser().resolve())
+    os.makedirs(outfd)
+    sys.stdout = open(f'{outfd}/log_xtb.txt', 'w')
     
-    # ========== Settings (CHANGE HERE) ==========
-    
-    # The maximum number of conformers to be optimized with xTB per molecule
-    max_nconf = 20
-    
-    # Positive integer that sets the upper limit on the number of
-    # iterative displacements applied when residual imaginary frequencies
-    # persist after the xTB optimization.
-    max_repeat = 100
-    
-    # Enter the file and directory paths
-    file_path_input = f'{fd}/rdkit_stats.csv'
-    rdkitxyzfd = f'{fd}/rdkit/xyz'
-    file_path_output_all = f'xTB_stats_all.csv'
-    file_path_output_min = f'{fd}/xTB_stats_Emin.csv'
-    # =============================================
-    
-    sys.stdout = open(f'{fd}/log_xTB.txt', 'w')
-    process_rows_for_xtb(fd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf, max_repeat, njobs=-1)
+    file_path_input = f'{rdkitfd}/{args.infile}'
+    rdkitxyzfd = f'{rdkitfd}/xyz'
+    process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, args.outfile_allresults, args.outfile, args.max_nconfs, args.max_repeat, args.imagfreq_thres, args.njobs, args.backend)
     print('Finish')
     sys.stdout.close()
     
     
+if __name__ == '__main__':
+    main()
