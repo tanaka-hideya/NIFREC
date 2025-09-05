@@ -1,10 +1,11 @@
 """
-File: 1_2_nifrec_xtb.py
-Author: Hideya Tanaka
-Supervised by: Tomoyuki Miyao
+File: nifrec_xtb.py
+Author: Hideya Tanaka at Nara Institute of Science and Technology
+Supervised by: Tomoyuki Miyao at Nara Institute of Science and Technology
 Description:
-    This script performs the optimization using xTB.
+    This script performs the conformer optimization and vibrational analysis using xTB, with automatic handling of small imaginary frequencies.
 """
+
 import argparse
 import os
 import subprocess
@@ -13,12 +14,11 @@ import pandas as pd
 from rdkit import Chem
 import json
 from joblib import cpu_count, delayed, Parallel
-from utility_opt import MakeFolder
 import sys
 from pathlib import Path
 
 
-def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=100, imagfreq_thres=5.0):
+def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=50, imagfreq_thres=5.0):
     if namespace is None:
         namespace = ''
 
@@ -84,6 +84,7 @@ def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd,
 
     return new_json_path
 
+
 def check_vibrational_frequencies_and_energy(json_file, imagfreq_thres=5.0):
     if json_file is None:
         return False, None
@@ -105,19 +106,34 @@ def check_vibrational_frequencies_and_energy(json_file, imagfreq_thres=5.0):
 
     return not has_imaginary_frequencies, total_energy
 
-def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf, max_repeat=100, imagfreq_thres=5.0, njobs=-1, backend='loky'):
+
+def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf=20, max_repeat=50, imagfreq_thres=5.0, njobs=-1, backend='loky'):
+    print(f'Conformer optimization and vibrational analysis using xTB')
+    print('========== Settings ==========')
+    print(f'outfolder-xtb: {outfd}')
+    print(f'file_path_input: {file_path_input}')
+    print(f'rdkitxyzfd: {rdkitxyzfd}')
+    print(f'outfile: {file_path_output_min}')
+    print(f'outfile-allresults: {file_path_output_all}')
+    print(f'max-nconfs: {max_nconf}')
+    print(f'max-repeat: {max_repeat}')
+    print(f'imagfreq-thres: {imagfreq_thres}')
+    print(f'njobs: {njobs}')
+    print(f'backend: {backend}')
+    print('------------------------------')
+    
     df = pd.read_csv(file_path_input, index_col=0)
-    print(f'Total molecules (before rdkit optimization) {len(df)}')
+    print(f'All molecules in the dataset (before RDKit optimization) {len(df)}')
     
     smicol = 'smiles'
     molcol = 'romol'
     original_df = df[df.success_rdkit_confgen]
-    print(f'Total molecules (rdkit,is_success=True) {len(original_df)}')
+    print(f'All molecules successfully processed by RDKit conformer generation {len(original_df)}')
 
     mols_df = original_df.copy()
     
     mols_df[molcol] = mols_df[smicol].apply(Chem.MolFromSmiles)
-    mols_df.dropna(subset=molcol, inplace=True) # Drop fail molecules by rdkit
+    mols_df.dropna(subset=molcol, inplace=True) # Drop fail molecules by RDKit
     mols_df['formal_charge'] = mols_df[molcol].apply(Chem.GetFormalCharge)
 
     print(f'Done. Cheking structures and constraints.\n xTB optimization for {len(mols_df)} mols.')
@@ -126,10 +142,18 @@ def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_al
     njobs = cpu_count() -1 if njobs < 1 else njobs
     batches = np.array_split(mols_df, njobs)
 
+    optoutfd = f'{outfd}/opt'
+    imagfreqoutfd = f'{outfd}/imag_freq'
+    workingfd = f'{outfd}/working'
+    workerfd = f'{outfd}/worker'
+    os.makedirs(optoutfd)
+    os.makedirs(imagfreqoutfd)
+    os.makedirs(workingfd)
+    os.makedirs(workerfd)
     # xTB calculation
     status_all_df_list = []
     status_min_df_list = []
-    results = Parallel(n_jobs=njobs, backend=backend)([delayed(run_xtb_multi_files)(wid, batch, max_nconf, max_repeat, rdkitxyzfd, outfd, imagfreq_thres) for wid, batch in enumerate(batches)])
+    results = Parallel(n_jobs=njobs, backend=backend)([delayed(run_xtb_multi_files)(wid, batch, max_nconf, max_repeat, rdkitxyzfd, imagfreq_thres, optoutfd, imagfreqoutfd, workingfd, workerfd) for wid, batch in enumerate(batches)])
     for status_all, status_min in results:
         status_all_df_list.append(status_all)
         status_min_df_list.append(status_min)
@@ -140,18 +164,16 @@ def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_al
     combined_df = pd.concat([original_df, status_min_df], ignore_index=False, axis=1)
     if combined_df[smicol].equals(combined_df['smiles_xTB']):
         combined_df = combined_df.drop(columns='smiles_xTB')
-        print('success: combine')
+        print('xTB optimization completed.')
     combined_df.to_csv(f'{outfd}/{file_path_output_min}')
     
-    print(f'Total molecules ({file_path_output_min}) {len(combined_df)}')
+    print(f'All molecules ({outfd}/{file_path_output_min}) {len(combined_df)}')
     combined_df = combined_df[combined_df['confid'] != 0]
-    print(f'Total molecules (xTB,success) {len(combined_df)}')
+    print(f'All molecules successfully processed by xTB optimization and vibrational analysis (no imaginary frequencies) {len(combined_df)}')
+    print('confid = 0 means all conformers have imaginary frequencies.')
 
-def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd, imagfreq_thres):
-    optoutfd = MakeFolder(f'{outfd}/opt', allow_override=True)
-    imagfreqoutfd = MakeFolder(f'{outfd}/imag_freq', allow_override=True)
-    workingfd   = MakeFolder(f'{outfd}/working', allow_override=True)
-    
+
+def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, imagfreq_thres, optoutfd, imagfreqoutfd, workingfd, workerfd):    
     pwd_prev = os.getcwd()
     os.chdir(workingfd) # Output files are stored in wd
 
@@ -169,7 +191,7 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, outfd, i
         emin_val = np.inf
         emin_xyz_path = ''
         
-        with open(f'{outfd}/log_xTB_worker_{workerid}.txt', 'w') as f:
+        with open(f'{workerfd}/log_xTB_worker_{workerid}.txt', 'w') as f:
             print(f'Processing {cumnum+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
         
         for confid in range(1, nconfs+1):
@@ -214,7 +236,7 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--infolder-rdkit',
-                     help="Input folder to load RDKit results (XYZ files). Accepts absolute or relative paths; '~' is expanded.",
+                     help="Input folder for loading RDKit results (XYZ files). Accepts absolute or relative paths; '~' is expanded.",
                      type=str,
                      required=True,
                      )
