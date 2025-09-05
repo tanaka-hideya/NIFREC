@@ -5,6 +5,7 @@ Supervised by: Tomoyuki Miyao at Nara Institute of Science and Technology
 Description:
     This script performs the conformer generation using RDKit.
 """
+
 import argparse
 import os
 import numpy as np
