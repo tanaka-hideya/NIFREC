@@ -16,6 +16,7 @@ import json
 from joblib import cpu_count, delayed, Parallel
 import sys
 from pathlib import Path
+import shutil
 
 
 def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=50, imagfreq_thres=5.0):
@@ -107,12 +108,12 @@ def check_vibrational_frequencies_and_energy(json_file, imagfreq_thres=5.0):
     return not has_imaginary_frequencies, total_energy
 
 
-def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_all, file_path_output_min, max_nconf=20, max_repeat=50, imagfreq_thres=5.0, njobs=-1, backend='loky'):
+def process_rows_for_xtb(outfd, infd, infile, file_path_output_all, file_path_output_min, max_nconf=20, max_repeat=50, imagfreq_thres=5.0, njobs=-1, backend='loky'):
     print(f'Conformer optimization and vibrational analysis using xTB')
     print('========== Settings ==========')
     print(f'outfolder-xtb: {outfd}')
-    print(f'file_path_input: {file_path_input}')
-    print(f'rdkitxyzfd: {rdkitxyzfd}')
+    print(f'infolder-rdkit: {infd}')
+    print(f'infile: {infile}')
     print(f'outfile: {file_path_output_min}')
     print(f'outfile-allresults: {file_path_output_all}')
     print(f'max-nconfs: {max_nconf}')
@@ -121,6 +122,9 @@ def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_al
     print(f'njobs: {njobs}')
     print(f'backend: {backend}')
     print('------------------------------')
+    
+    file_path_input = f'{infd}/{infile}'
+    rdkitxyzfd = f'{infd}/xyz'
     
     df = pd.read_csv(file_path_input, index_col=0)
     print(f'All molecules in the dataset (before RDKit optimization) {len(df)}')
@@ -146,14 +150,16 @@ def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_al
     imagfreqoutfd = f'{outfd}/imag_freq'
     workingfd = f'{outfd}/working'
     workerfd = f'{outfd}/worker'
+    opt_emin_outfd = f'{outfd}/xtbopt_emin_xyz'
     os.makedirs(optoutfd)
     os.makedirs(imagfreqoutfd)
     os.makedirs(workingfd)
     os.makedirs(workerfd)
+    os.makedirs(opt_emin_outfd)
     # xTB calculation
     status_all_df_list = []
     status_min_df_list = []
-    results = Parallel(n_jobs=njobs, backend=backend)([delayed(run_xtb_multi_files)(wid, batch, max_nconf, max_repeat, rdkitxyzfd, imagfreq_thres, optoutfd, imagfreqoutfd, workingfd, workerfd) for wid, batch in enumerate(batches)])
+    results = Parallel(n_jobs=njobs, backend=backend)([delayed(run_xtb_multi_files)(wid, batch, max_nconf, max_repeat, rdkitxyzfd, imagfreq_thres, optoutfd, imagfreqoutfd, workingfd, workerfd, opt_emin_outfd) for wid, batch in enumerate(batches)])
     for status_all, status_min in results:
         status_all_df_list.append(status_all)
         status_min_df_list.append(status_min)
@@ -173,7 +179,7 @@ def process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, file_path_output_al
     print('confid = 0 means all conformers have imaginary frequencies.')
 
 
-def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, imagfreq_thres, optoutfd, imagfreqoutfd, workingfd, workerfd):    
+def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, imagfreq_thres, optoutfd, imagfreqoutfd, workingfd, workerfd, opt_emin_outfd):    
     pwd_prev = os.getcwd()
     os.chdir(workingfd) # Output files are stored in wd
 
@@ -219,6 +225,9 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, imagfreq
                                     'confid': emin_cidx,
                                     'total_energy_xTB': emin_val,
                                     'filepath': os.path.basename(emin_xyz_path)}
+        
+        if emin_cidx != 0:
+            shutil.copy(f'{optoutfd}/{os.path.basename(emin_xyz_path)}', opt_emin_outfd)
         
     os.chdir(pwd_prev) # set back the previous folder
     return pd.DataFrame.from_dict(status_all_dict, orient='index'), pd.DataFrame.from_dict(status_min_dict, orient='index')
@@ -292,13 +301,10 @@ def _parse_cli_args(argv=None):
 def main(argv=None):
     args = _parse_cli_args(argv)
     outfd = str(Path(args.outfolder_xtb).expanduser().resolve())
-    rdkitfd = str(Path(args.infolder_rdkit).expanduser().resolve())
+    infd = str(Path(args.infolder_rdkit).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_xtb.txt', 'w')
-    
-    file_path_input = f'{rdkitfd}/{args.infile}'
-    rdkitxyzfd = f'{rdkitfd}/xyz'
-    process_rows_for_xtb(outfd, file_path_input, rdkitxyzfd, args.outfile_allresults, args.outfile, args.max_nconfs, args.max_repeat, args.imagfreq_thres, args.njobs, args.backend)
+    process_rows_for_xtb(outfd, infd, args.infile, args.outfile_allresults, args.outfile, args.max_nconfs, args.max_repeat, args.imagfreq_thres, args.njobs, args.backend)
     print('Finish')
     sys.stdout.close()
     
