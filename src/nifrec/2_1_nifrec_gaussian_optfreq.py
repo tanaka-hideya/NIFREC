@@ -41,12 +41,15 @@ from joblib import cpu_count
 import sys
 from pathlib import Path
 
+
 def parse_freq_and_disp(logpath):
     data = cclib.io.ccread(logpath)
     return data.vibfreqs, data.vibdisps
 
+
 def detect_imag(freqs):
     return any(f < 0 for f in freqs)
+
 
 def combined_imag_vector(freqs, disps, imag_vec_sum):
     idx = [i for i, f in enumerate(freqs) if f < 0]
@@ -58,8 +61,10 @@ def combined_imag_vector(freqs, disps, imag_vec_sum):
     norm = np.linalg.norm(vec)
     return vec / norm if norm > 1e-12 else vec
 
+
 def displaced_coords(coords, vec, disp):
     return coords + vec * disp
+
 
 def write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data, oldchkpath=''):
     gjfpath = f'{gname}.gjf'
@@ -78,6 +83,7 @@ def write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xy
             f.write(f'{xyz_data}')
         f.write('\n')
 
+
 def run_gaussian(gname):
     command = f'g16 {gname}.gjf'
     try:
@@ -86,6 +92,7 @@ def run_gaussian(gname):
             print(f'{gname}, error during gaussian run: {e}')
             return False
     return True
+
 
 def move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname):
     gjffilepath = f'{gjfoutfd}/{gname}.gjf'
@@ -102,6 +109,7 @@ def move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname):
             return False
     return True
 
+
 def move_imag_dir(imagfoutfd, gname, suffix):
     gjffilepath = f'{imagfoutfd}/{gname}_{suffix}.gjf'
     logfilepath = f'{imagfoutfd}/{gname}_{suffix}.log'
@@ -116,6 +124,7 @@ def move_imag_dir(imagfoutfd, gname, suffix):
             print(f'{gname}{ext} does not exist')
             return False, None, None
     return True, logfilepath, chkfilepath
+
 
 def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum):
 
@@ -201,6 +210,7 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
         if not flag_mid:
             return None, False, None, None
     return None, False, None, -1
+
 
 def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True):
     print(f'Gaussian calculation (opt freq)')
