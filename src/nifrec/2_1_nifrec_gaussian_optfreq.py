@@ -227,7 +227,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
     chkoutfd = f'{outfd}/gaussian_chk_{keyword}'
     imagfoutfd = f'{outfd}/gaussian_imagf_{keyword}'
     for path in (outfd, outputoutfd, gjfoutfd, logoutfd, chkoutfd, imagfoutfd):
-        os.makedirs(path, exist_ok=True)
+        os.makedirs(path)
     
     pwd_prev = os.getcwd()
     os.chdir(outputoutfd) # Output files are stored in outputoutfd
@@ -254,7 +254,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
         number = row.Index
         smiles = row.smiles
         confid = row.confid
-        energy_xtb = row.total_energy
+        energy_xtb = row.total_energy_xTB
         filepath  = row.filepath
         charge = row.formal_charge
         multiplicity = row.multiplicity
@@ -323,7 +323,8 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--infolder-xtb',
-                     help="Input folder for loading xTB results (XYZ files). Accepts absolute or relative paths; '~' is expanded.",
+                help=("Input folder for loading xTB results (XYZ files). Accepts absolute or relative paths; '~' is expanded. "
+                    "Generates .gjf files by referencing the xtbopt_emin_xyz folder located inside the specified --infolder-xtb directory."),
                      type=str,
                      required=True,
                      )
@@ -338,19 +339,19 @@ def _parse_cli_args(argv=None):
                      default='optfreq',
                      )
     parser.add_argument('--theory-level',
-                help=("Calculation level and additional options (in route section) for Gaussian. "
+                help=("Calculation level and additional options (in route section) for Gaussian. (e.g. 'M062X/Def2SVP') "
                     "Do not include 'opt' or 'freq' keywords, as the job will automatically run with 'opt freq=noraman'. "
                     "Use this field for other settings such as solvent effects."),
                      type=str,
                      default='M062X/Def2SVP',
                      )
     parser.add_argument('--nproc',
-                     help='%nprocshared in Gaussian. If <= 0, uses (CPU cores - 1).',
+                     help='nprocshared in Gaussian. If <= 0, uses (CPU cores - 1).',
                      type=int,
                      default=4,
                      )
     parser.add_argument('--mem',
-                     help="%mem in Gaussian. It is recommended to set %mem to '1-4GB * --nproc'.",
+                     help="mem in Gaussian. It is recommended to set mem to '1-4GB * --nproc'.",
                      type=int,
                      default=16,
                      )
@@ -359,7 +360,7 @@ def _parse_cli_args(argv=None):
                     "normalized combined imaginary-mode vector to generate the first "
                     "perturbed geometry.  Subsequent iterations use integer multiples "
                     "of this value (2 * base_disp, 3 * base_disp, …).  Typical choices "
-                    "are 0.05–0.20 Å: smaller values may leave the structure in the "
+                    "are 0.05-0.20 Å: smaller values may leave the structure in the "
                     "saddle region, whereas excessively large values risk overshooting "
                     "the nearest minimum and destabilizing the optimization."),
                      type=float,
