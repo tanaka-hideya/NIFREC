@@ -298,6 +298,10 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
         status_df['success_disploop'] = status_df['success_disploop'].astype('Int64')
         status_df.to_csv(file_path_output)
         
+    status_df = status_df[status_df['confid'] != 0]
+    print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) {len(status_df)}")
+    print('confid = 0 means the Gaussian job terminated abnormally or that imaginary frequencies could not be removed.')
+        
     os.chdir(pwd_prev) # Set back the previous folder
 
 
