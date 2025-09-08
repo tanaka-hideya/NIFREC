@@ -236,7 +236,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
     logoutfd = f'{outfd}/gaussian_log_{keyword}'
     chkoutfd = f'{outfd}/gaussian_chk_{keyword}'
     imagfoutfd = f'{outfd}/gaussian_imagf_{keyword}'
-    for path in (outfd, outputoutfd, gjfoutfd, logoutfd, chkoutfd, imagfoutfd):
+    for path in (outputoutfd, gjfoutfd, logoutfd, chkoutfd, imagfoutfd):
         os.makedirs(path)
     
     pwd_prev = os.getcwd()
