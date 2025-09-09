@@ -204,7 +204,6 @@ def _parse_cli_args(argv=None):
     parser.add_argument('--no-homo-lumo',
                help=("Default: extract HOMO/LUMO energies from MO data (RESTRICTED METHODS ONLY). "
                    "Values are reported in eV. Unrestricted (UHF) logs are not supported."),
-                     type=str,
                      action='store_true',
                      )
     return parser.parse_args(argv)
