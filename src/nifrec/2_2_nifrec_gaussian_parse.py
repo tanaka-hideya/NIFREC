@@ -13,16 +13,19 @@ import sys
 import cclib
 from pathlib import Path
 
-def gaussian_analyze(infd, number, smiles, glogfd, filepath):  
+EV_PER_HARTREE = 27.211386245988  
+
+
+def gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo):  
     results = {'is_success': False,
-                'zero_corr': None,
-                'E_corr': None,
-                'H_corr': None,
-                'G_corr': None,
+                'functional': None,
+                'basis_set': None,
+                'E_scf_final': None,
+                'zpve': None,
                 'Ezero': None,
-                'Ethermal': None,
                 'H': None,
                 'G': None,
+                'T': None,
                 'HOMO': None,
                 'LUMO': None}
     
@@ -31,15 +34,12 @@ def gaussian_analyze(infd, number, smiles, glogfd, filepath):
         print(f'{glogpath} does not exist')
         return results
 
-    # Flag to check success of opt
-    log_line = 0
-    # Flag to manage pairing between Alpha occ. and Alpha virt.
-    expect_alpha_virt = False
-    current_alpha_occ = []
-
     try:
         # cclib
         data = cclib.io.ccread(glogpath)
+        results['functional'] = data.metadata['functional']
+        results['basis_set'] = data.metadata['basis_set']
+        
         # Check imaginary freq
         # vibfreqs: vibrational frequencies, 1/cm, array of rank 1 (cclib parsed data (version 1.8.1))
         vibfreqs = data.vibfreqs
@@ -49,48 +49,29 @@ def gaussian_analyze(infd, number, smiles, glogfd, filepath):
         if is_stable:
             print(f'imaginary freq: number {number}, smiles {smiles}')
             return results
+
+        # Check success of opt
+        if data.metadata['success'] and data.optdone:
+            results['is_success'] = True
+
+        results['E_scf_final'] = data.scfenergies[-1] / EV_PER_HARTREE
+        results['zpve'] = data.zpve
+        results['Ezero'] = results['E_scf_final'] + results['zpve']
+        results['H'] = data.enthalpy
+        results['G'] = data.freeenergy
+        results['T'] = data.temperature
         
-        with open(glogpath, 'r') as f:
-            for line in f:
-                # Check success of opt
-                if gchk in line and log_line == 0:
-                    log_line = 1
-                if gjf_key in line and log_line == 1:
-                    log_line = 2
-                if 'Optimized Parameters' in line and log_line == 2:
-                    log_line = 3
-                if 'Normal termination of Gaussian' in line and log_line == 3:
-                    results['is_success'] = True
-                    
-                # Parse
-                for key, pattern in compiled_patterns.items():
-                    match = pattern.search(line)
-                    if match:
-                        if key == 'Alpha_occ':
-                            energy_values = match.group(1).strip().split()
-                            energy_values = [float(val) for val in energy_values]
-                            current_alpha_occ = energy_values
-                            # Set flag to expect the next Alpha virt. line
-                            expect_alpha_virt = True
-                        elif key == 'Alpha_virt':
-                            if expect_alpha_virt:
-                                energy_values = match.group(1).strip().split()
-                                energy_values = [float(val) for val in energy_values]
-                                if current_alpha_occ:
-                                    results['HOMO'] = current_alpha_occ[-1]  # Last occupied is HOMO
-                                if energy_values:
-                                    results['LUMO'] = energy_values[0]   # First virtual is LUMO
-                                # Reset the flag
-                                expect_alpha_virt = False
-                        else:
-                            results[key] = float(match.group(1))
-                            
-        # Error check by using cclib
-        if results['H'] != data.enthalpy or results['G'] != data.freeenergy:
-            print(f'parse error based on cclib, number {number}, smiles {smiles}')
-            results['is_success'] = False
+        if no_homo_lumo:
             return results
-                    
+        
+        # restricted method version
+        homoidx = data.homos[0]
+        lumoidx = homoidx + 1
+        homo_energy = data.moenergies[0][homoidx]
+        lumo_energy = data.moenergies[0][lumoidx]
+        results['HOMO'] = homo_energy
+        results['LUMO'] = lumo_energy
+
     except Exception as e:
         print(f'parse error: {e}, number {number}, smiles {smiles}')
         results['is_success'] = False
@@ -98,13 +79,15 @@ def gaussian_analyze(infd, number, smiles, glogfd, filepath):
     
     return results
 
-def process_rows_for_gparse(infd, glogfd, infile, outfile):
+
+def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
     print(f'Gaussian parse (opt freq)')
     print('========== Settings ==========')
     print(f'infolder-gaussian: {infd}')
     print(f'infolder-gaussian-log: {glogfd}')
     print(f'infile: {infile}')
     print(f'outfile: {outfile}')
+    print(f'no-homo-lumo: {no_homo_lumo}')
     print('------------------------------')
     
     # Safety check: prevent accidental overwrite when input and output filenames are identical.
@@ -137,7 +120,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile):
         with open(f'{infd}/log_gaussian_worker_parse.txt', 'w') as f:
             print(f'Processing {cumnum+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
             
-        results_dict = gaussian_analyze(infd, number, smiles, glogfd, filepath)
+        results_dict = gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo)
 
         if results_dict['is_success']:
             status_dict[number] = {'smiles': smiles,
@@ -145,38 +128,38 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile):
                                     'charge': charge,
                                     'multiplicity': multiplicity,
                                     'total_energy_xTB': energy_xtb,
-                                    'Zero_point_correction': results_dict['zero_corr'],
-                                    'Thermal_correction_to_Energy': results_dict['E_corr'],
-                                    'Thermal_correction_to_Enthalpy': results_dict['H_corr'],
-                                    'Thermal_correction_to_Gibbs_Free_Energy': results_dict['G_corr'],
-                                    'Sum_of_electronic_and_zero_point_Energies': results_dict['Ezero'],
-                                    'Sum_of_electronic_and_thermal_Energies': results_dict['Ethermal'],
-                                    'Sum_of_electronic_and_thermal_Enthalpies': results_dict['H'],
-                                    'Sum_of_electronic_and_thermal_Free_Energies': results_dict['G'],
-                                    'HOMO': results_dict['HOMO'],
-                                    'LUMO': results_dict['LUMO'],
                                     'filepath': filepath,
                                     'success_stage': success_stage,
-                                    'success_disploop': success_disploop}
+                                    'success_disploop': success_disploop,
+                                    'functional': results_dict['functional'],
+                                    'basis_set': results_dict['basis_set'],
+                                    'Final_SCF_Energy_hartree': results_dict['E_scf_final'],
+                                    'Zero_point_correction_hartree': results_dict['zpve'],
+                                    'Sum_of_electronic_and_zero_point_Energies_hartree': results_dict['Ezero'],
+                                    'Sum_of_electronic_and_thermal_Enthalpies_hartree': results_dict['H'],
+                                    'Sum_of_electronic_and_thermal_Free_Energies_hartree': results_dict['G'],
+                                    'Temperature_K': results_dict['T'],
+                                    'HOMO_eV': results_dict['HOMO'],
+                                    'LUMO_eV': results_dict['LUMO']}
         else:
             status_dict[number] = {'smiles': smiles,
                                     'confid': 0,
                                     'charge': charge,
                                     'multiplicity': multiplicity,
                                     'total_energy_xTB': energy_xtb,
-                                    'Zero_point_correction': results_dict['zero_corr'],
-                                    'Thermal_correction_to_Energy': results_dict['E_corr'],
-                                    'Thermal_correction_to_Enthalpy': results_dict['H_corr'],
-                                    'Thermal_correction_to_Gibbs_Free_Energy': results_dict['G_corr'],
-                                    'Sum_of_electronic_and_zero_point_Energies': results_dict['Ezero'],
-                                    'Sum_of_electronic_and_thermal_Energies': results_dict['Ethermal'],
-                                    'Sum_of_electronic_and_thermal_Enthalpies': results_dict['H'],
-                                    'Sum_of_electronic_and_thermal_Free_Energies': results_dict['G'],
-                                    'HOMO': results_dict['HOMO'],
-                                    'LUMO': results_dict['LUMO'],
                                     'filepath': filepath,
                                     'success_stage': success_stage,
-                                    'success_disploop': success_disploop}
+                                    'success_disploop': success_disploop,
+                                    'functional': results_dict['functional'],
+                                    'basis_set': results_dict['basis_set'],
+                                    'Final_SCF_Energy_hartree': results_dict['E_scf_final'],
+                                    'Zero_point_correction_hartree': results_dict['zpve'],
+                                    'Sum_of_electronic_and_zero_point_Energies_hartree': results_dict['Ezero'],
+                                    'Sum_of_electronic_and_thermal_Enthalpies_hartree': results_dict['H'],
+                                    'Sum_of_electronic_and_thermal_Free_Energies_hartree': results_dict['G'],
+                                    'Temperature_K': results_dict['T'],
+                                    'HOMO_eV': results_dict['HOMO'],
+                                    'LUMO_eV': results_dict['LUMO']}
             
         status_df = pd.DataFrame.from_dict(status_dict, orient='index')
         status_df.to_csv(file_path_output)
@@ -218,6 +201,12 @@ def _parse_cli_args(argv=None):
                      type=str,
                      required=True,
                      )
+    parser.add_argument('--no-homo-lumo',
+               help=("Default: extract HOMO/LUMO energies from MO data (RESTRICTED METHODS ONLY). "
+                   "Values are reported in eV. Unrestricted (UHF) logs are not supported."),
+                     type=str,
+                     action='store_true',
+                     )
     return parser.parse_args(argv)
 
 
@@ -226,7 +215,7 @@ def main(argv=None):
     infd = str(Path(args.infolder_gaussian).expanduser().resolve())
     infd_log = str(Path(args.infolder_gaussian_log).expanduser().resolve())
     sys.stdout = open(f'{infd}/log_gaussian_parse.txt', 'w')
-    process_rows_for_gparse(infd, infd_log, args.infile, args.outfile)
+    process_rows_for_gparse(infd, infd_log, args.infile, args.outfile, args.no_homo_lumo)
     print('Finish')
     sys.stdout.close()
     
