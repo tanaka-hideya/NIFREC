@@ -1,33 +1,19 @@
 """
-File: 2_2_nifrec_gaussian_parse.py
-Author: Hideya Tanaka
-Supervised by: Tomoyuki Miyao
+File: nifrec_gaussian_parse.py
+Author: Hideya Tanaka at Nara Institute of Science and Technology
+Supervised by: Tomoyuki Miyao at Nara Institute of Science and Technology
 Description:
     This script performs parse of Gaussian results.
 """
 
+import argparse
 import os
 import pandas as pd
 import sys
-import re
 import cclib
-from utility_opt import MakeFolder
+from pathlib import Path
 
-def gaussian_analyze(number, smiles, glogfd, gchkfd, ggjffd, filepath, keyword, logoutfd, chkoutfd, gjfoutfd, gjf_key):
-    
-    patterns = {'zero_corr': r'Zero-point correction=\s+([-+]?\d*\.\d+|\d+)',
-                'E_corr': r'Thermal correction to Energy=\s+([-+]?\d*\.\d+|\d+)',
-                'H_corr': r'Thermal correction to Enthalpy=\s+([-+]?\d*\.\d+|\d+)',
-                'G_corr': r'Thermal correction to Gibbs Free Energy=\s+([-+]?\d*\.\d+|\d+)',
-                'Ezero': r'Sum of electronic and zero-point Energies=\s+([-+]?\d*\.\d+|\d+)',
-                'Ethermal': r'Sum of electronic and thermal Energies=\s+([-+]?\d*\.\d+|\d+)',
-                'H': r'Sum of electronic and thermal Enthalpies=\s+([-+]?\d*\.\d+|\d+)',
-                'G': r'Sum of electronic and thermal Free Energies=\s+([-+]?\d*\.\d+|\d+)',
-                'Alpha_occ': r'Alpha\s+occ\.\s+eigenvalues\s+--\s+([-+]?\d*\.\d+(?:\s+[-+]?\d*\.\d+)*)',
-                'Alpha_virt': r'Alpha\s+virt\.\s+eigenvalues\s+--\s+([-+]?\d*\.\d+(?:\s+[-+]?\d*\.\d+)*)'}
-
-    compiled_patterns = {key: re.compile(pattern) for key, pattern in patterns.items()}
-  
+def gaussian_analyze(infd, number, smiles, glogfd, filepath):  
     results = {'is_success': False,
                 'zero_corr': None,
                 'E_corr': None,
@@ -44,41 +30,7 @@ def gaussian_analyze(number, smiles, glogfd, gchkfd, ggjffd, filepath, keyword, 
     if not os.path.exists(glogpath):
         print(f'{glogpath} does not exist')
         return results
-    
-    gchk = filepath.replace('.log', '.chk')
-    gchkpath = f'{gchkfd}/{gchk}'
-    if not os.path.exists(gchkpath):
-        print(f'{gchkpath} does not exist')
-        return results
-    
-    ggjf = filepath.replace('.log', '.gjf')
-    ggjfpath = f'{ggjffd}/{ggjf}'
-    if not os.path.exists(ggjfpath):
-        print(f'{ggjfpath} does not exist')
-        return results
-        
-    try:
-        # cclib
-        data = cclib.io.ccread(glogpath)
-        # Check imaginary freq
-        # vibfreqs: vibrational frequencies, 1/cm, array of rank 1 (cclib parsed data (version 1.8.1))
-        vibfreqs = data.vibfreqs
-        with open(f'{fd}/freq_gaussian_{keyword}_analyze.txt', 'a') as f:
-            print(f'number {number}, smiles {smiles}, freq {vibfreqs}', file=f)
-        is_stable = any(freq < 0 for freq in vibfreqs)
-        if is_stable:
-            print(f'imaginary freq: number {number}, smiles {smiles}')
-            os.rename(f'{glogpath}', f'{logoutfd}/{filepath}')
-            os.rename(f'{gchkpath}', f'{chkoutfd}/{gchk}')
-            os.rename(f'{ggjfpath}', f'{gjfoutfd}/{ggjf}')
-            return results
-    except Exception as e:
-        print(f'vibfreqs parse error: {e}, number {number}, smiles {smiles}')
-        os.rename(f'{glogpath}', f'{logoutfd}/{filepath}')
-        os.rename(f'{gchkpath}', f'{chkoutfd}/{gchk}')
-        os.rename(f'{ggjfpath}', f'{gjfoutfd}/{ggjf}')
-        return results
-    
+
     # Flag to check success of opt
     log_line = 0
     # Flag to manage pairing between Alpha occ. and Alpha virt.
@@ -86,6 +38,18 @@ def gaussian_analyze(number, smiles, glogfd, gchkfd, ggjffd, filepath, keyword, 
     current_alpha_occ = []
 
     try:
+        # cclib
+        data = cclib.io.ccread(glogpath)
+        # Check imaginary freq
+        # vibfreqs: vibrational frequencies, 1/cm, array of rank 1 (cclib parsed data (version 1.8.1))
+        vibfreqs = data.vibfreqs
+        with open(f'{infd}/freq_gaussian_parse.txt', 'a') as f:
+            print(f'number {number}, smiles {smiles}, freq {vibfreqs}', file=f)
+        is_stable = any(freq < 0 for freq in vibfreqs)
+        if is_stable:
+            print(f'imaginary freq: number {number}, smiles {smiles}')
+            return results
+        
         with open(glogpath, 'r') as f:
             for line in f:
                 # Check success of opt
@@ -125,42 +89,31 @@ def gaussian_analyze(number, smiles, glogfd, gchkfd, ggjffd, filepath, keyword, 
         if results['H'] != data.enthalpy or results['G'] != data.freeenergy:
             print(f'parse error based on cclib, number {number}, smiles {smiles}')
             results['is_success'] = False
-            os.rename(f'{glogpath}', f'{logoutfd}/{filepath}')
-            os.rename(f'{gchkpath}', f'{chkoutfd}/{gchk}')
-            os.rename(f'{ggjfpath}', f'{gjfoutfd}/{ggjf}')
             return results
                     
     except Exception as e:
         print(f'parse error: {e}, number {number}, smiles {smiles}')
         results['is_success'] = False
-        os.rename(f'{glogpath}', f'{logoutfd}/{filepath}')
-        os.rename(f'{gchkpath}', f'{chkoutfd}/{gchk}')
-        os.rename(f'{ggjfpath}', f'{gjfoutfd}/{ggjf}')
         return results
     
     return results
 
-def process_rows_for_gparse(fd, file_path_input, glogfd, gchkfd, ggjffd, file_path_output, keyword, gjf_key):
+def process_rows_for_gparse(infd, glogfd, infile, outfile):
     print(f'Gaussian parse (opt freq)')
     print('========== Settings ==========')
-    print(f'keyword: {keyword}')
-    print(f'gjf_route_section_input_for_check: {gjf_key}')
-    print(f'file_path_input: {file_path_input}')
-    print(f'glogfd: {glogfd}')
-    print(f'gchkfd: {gchkfd}')
-    print(f'ggjffd: {ggjffd}')
-    print(f'file_path_output: {file_path_output}')
+    print(f'infolder-gaussian: {infd}')
+    print(f'infolder-gaussian-log: {glogfd}')
+    print(f'infile: {infile}')
+    print(f'outfile: {outfile}')
     print('------------------------------')
     
-    outfd = MakeFolder(f'{fd}/gaussian_{keyword}_analyze_failure', allow_override=True)
-    logoutfd = MakeFolder(f'{outfd}/gaussian_log_{keyword}_analyze_failure', allow_override=True)
-    chkoutfd = MakeFolder(f'{outfd}/gaussian_chk_{keyword}_analyze_failure', allow_override=True)
-    gjfoutfd = MakeFolder(f'{outfd}/gaussian_gjf_{keyword}_analyze_failure', allow_override=True)
+    file_path_input = f'{infd}/{infile}'
+    file_path_output = f'{infd}/{outfile}'
             
     df = pd.read_csv(file_path_input, index_col=0)
-    print(f'Total molecules {len(df)}')
+    print(f'All molecules in the dataset {len(df)}')
     df = df[df['confid'] != 0]
-    print(f'Total molecules (gaussian,success) {len(df)}')
+    print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) {len(df)}")
 
     ntotal = len(df)
     status_dict = dict()
@@ -176,10 +129,10 @@ def process_rows_for_gparse(fd, file_path_input, glogfd, gchkfd, ggjffd, file_pa
         success_stage = row.success_stage
         success_disploop = row.success_disploop
         
-        with open(f'{fd}/log_gaussian_worker_{keyword}_analyze.txt', 'w') as f:
+        with open(f'{infd}/log_gaussian_worker_parse.txt', 'w') as f:
             print(f'Processing {cumnum+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
             
-        results_dict = gaussian_analyze(number, smiles, glogfd, gchkfd, ggjffd, filepath, keyword, logoutfd, chkoutfd, gjfoutfd, gjf_key)
+        results_dict = gaussian_analyze(infd, number, smiles, glogfd, filepath)
 
         if results_dict['is_success']:
             status_dict[number] = {'smiles': smiles,
@@ -223,32 +176,53 @@ def process_rows_for_gparse(fd, file_path_input, glogfd, gchkfd, ggjffd, file_pa
         status_df = pd.DataFrame.from_dict(status_dict, orient='index')
         status_df.to_csv(file_path_output)
         
-        status_df_failure = status_df[status_df['confid'] == 0]
-        status_df_failure.to_csv(f'{outfd}/gaussian_{keyword}_analyze_failure.csv')
-        
-    print('success: check log')
-        
-if __name__ == '__main__':
-    fd = os.path.dirname(os.path.abspath(__file__))
-    
-    # ========== Settings (CHANGE HERE) ==========
-    # A name used to identify output directories and files in 2_1_nifrec_gaussian_optfreq.py (Modification is not mandatory)
-    keyword = 'optfreq'
-    
-    # For check (e.g. 'M062X/Def2SVP')
-    gjf_key = 'M062X/Def2SVP'
-    
-    # Enter the file and directory paths
-    file_path_input = f'{fd}/gaussian_{keyword}_stats.csv'
-    glogfd = f'{fd}/gaussian_{keyword}/gaussian_log_{keyword}'
-    gchkfd = f'{fd}/gaussian_{keyword}/gaussian_chk_{keyword}'
-    ggjffd = f'{fd}/gaussian_{keyword}/gaussian_gjf_{keyword}'
-    file_path_output = f'{fd}/gaussian_{keyword}_parse.csv'
-    # =============================================
-    
-    sys.stdout = open(f'{fd}/log_gaussian_{keyword}_parse.txt', 'w')
-    process_rows_for_gparse(fd, file_path_input, glogfd, gchkfd, ggjffd, file_path_output, keyword, gjf_key)
+    status_df = status_df[status_df['confid'] != 0]
+    print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) {len(status_df)}")
+    print("confid = 0 means the failed Gaussian 'opt freq' calculations or that imaginary frequencies could not be removed.")
+    print("confid != 0: check 'optdone'")
+
+
+def _parse_cli_args(argv=None):
+
+    parser = argparse.ArgumentParser(
+                        prog='nifrec_gaussian_parse',
+            description='This script parses Gaussian output files (opt freq).',
+    )
+    parser.add_argument('--infolder-gaussian',
+                     help="Input folder for loading gaussian results (CSV file). (Output folder to write parsed results) Accepts absolute or relative paths; '~' is expanded.",
+                     type=str,
+                     required=True,
+                     )
+    parser.add_argument('--infolder-gaussian-log',
+                help=("Input folder for loading gaussian .log files. Accepts absolute or relative paths; '~' is expanded."
+                      "typically, it is located under --infolder-gaussian."),
+                     type=str,
+                     required=True,
+                     )
+    parser.add_argument('--infile',
+                     help="Name of the input CSV file (gaussian summary) located under --infolder-gaussian.",
+                     type=str,
+                     required=True,
+                     )
+    parser.add_argument('--outfile',
+                     help='Name of the output CSV file to write parsed results (saved under --infolder-gaussian).',
+                     type=str,
+                     required=True,
+                     )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = _parse_cli_args(argv)
+    infd = str(Path(args.infolder_gaussian).expanduser().resolve())
+    infd_log = str(Path(args.infolder_gaussian_log).expanduser().resolve())
+    sys.stdout = open(f'{infd}/log_gaussian_parse.txt', 'w')
+    process_rows_for_gparse(infd, infd_log, args.infile, args.outfile)
     print('Finish')
     sys.stdout.close()
     
+    
+if __name__ == '__main__':
+    main()
+
     
