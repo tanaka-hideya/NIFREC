@@ -107,6 +107,11 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile):
     print(f'outfile: {outfile}')
     print('------------------------------')
     
+    # Safety check: prevent accidental overwrite when input and output filenames are identical.
+    # Using the same name would overwrite the original Gaussian summary.
+    if infile == outfile:
+        raise ValueError('The input file name (--infile) and output file name (--outfile) are identical. Use a different --outfile to avoid overwriting the source CSV.')
+
     file_path_input = f'{infd}/{infile}'
     file_path_output = f'{infd}/{outfile}'
             
@@ -186,21 +191,25 @@ def _parse_cli_args(argv=None):
 
     parser = argparse.ArgumentParser(
                         prog='nifrec_gaussian_parse',
-            description='This script parses Gaussian output files (opt freq).',
+                        description='This script parses Gaussian output files (opt freq).',
     )
     parser.add_argument('--infolder-gaussian',
-                     help="Input folder for loading gaussian results (CSV file). (Output folder to write parsed results) Accepts absolute or relative paths; '~' is expanded.",
+               help=("Input folder for loading Gaussian results (CSV file). (Also the output folder to which parsed results are written.) "
+                   "Accepts absolute or relative paths; '~' is expanded. "
+                   "Advanced use case: You may manually re-run Gaussian for molecules that failed in nifrec_gaussian_optfreq before executing this parser. "
+                   "If you adopt this workflow you MUST (1) edit the CSV given via --infile so each successfully re-computed molecule has a non-zero 'confid' and a correct 'filepath' pointing to the re-calculated structure; and (2) gather the corresponding successful Gaussian '.log' files into the directory passed via --infolder-gaussian-log. "
+                   "For clarity and reproducibility, keep the original directory produced by nifrec_gaussian_optfreq unchanged; instead make a copy of that directory, perform the manual re-calculations there, and run this parsing step within the copied directory."),
                      type=str,
                      required=True,
                      )
     parser.add_argument('--infolder-gaussian-log',
-                help=("Input folder for loading gaussian .log files. Accepts absolute or relative paths; '~' is expanded."
+                help=("Input folder for loading Gaussian .log files. Accepts absolute or relative paths; '~' is expanded."
                       "typically, it is located under --infolder-gaussian."),
                      type=str,
                      required=True,
                      )
     parser.add_argument('--infile',
-                     help="Name of the input CSV file (gaussian summary) located under --infolder-gaussian.",
+                     help="Name of the input CSV file (Gaussian summary) located under --infolder-gaussian.",
                      type=str,
                      required=True,
                      )
