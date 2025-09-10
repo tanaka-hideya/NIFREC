@@ -165,7 +165,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
         status_df.to_csv(file_path_output)
         
     status_df = status_df[status_df['confid'] != 0]
-    print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) — after parsing {len(status_df)}")
+    print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) (after parsing) {len(status_df)}")
     print("confid = 0 means the failed Gaussian 'opt freq' calculations or that imaginary frequencies could not be removed.")
     print("confid != 0: check 'optdone'")
 
