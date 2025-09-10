@@ -50,12 +50,14 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     
     original_df = pd.read_csv(file_path_input, index_col=idxcol)
     print(f'Loaded mols: {len(original_df)}')
+    original_df[smicol] = original_df[smicol].apply(smiles_to_canonical)
     df = original_df.copy()
     
-    # Remove duplicates
-    df[smicol] = original_df[smicol].apply(smiles_to_canonical)
-    df.drop_duplicates(subset=smicol, inplace=True)
-    print(f'Loaded mols after removing duplicates: {len(df)}')
+    # Check duplicates
+    n_before = len(df)
+    n_after = len(df.drop_duplicates(subset=smicol))
+    if n_after != n_before:
+        raise ValueError(f"Duplicate SMILES detected in column '{smicol}'")
     
     # Parallel calculation setting     
     njobs = cpu_count() -1 if njobs < 1 else njobs
@@ -144,7 +146,7 @@ def _parse_cli_args(argv=None):
     parser.add_argument('--outfile',
                help=("Name of the output CSV file to write summary (saved under --outfolder-rdkit). "
                    "Note: If the SMILES column specified by --smicol is not named 'smiles', it will be renamed to 'smiles' in the output CSV "
-                   "(unless a 'smiles' column already exists)."),
+                   "(unless a 'smiles' column already exists). Canonical smiles are stored in the 'smiles' column."),
                      type=str,
                      default='rdkit_stats.csv',
                      )
