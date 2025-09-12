@@ -67,7 +67,8 @@ python -m 1_1_nifrec_rdkit --infile data/sample.csv --smicol smi --outfolder res
 ```
 Then, you can find the `rdkit-confgen` folder under the `results` directory, where the conformation generation results are stored.
 
-
+## License
+This project is licensed under the terms of the MIT license. See [LICENSE](https://github.com/tanaka-hideya/NIFREC/blob/main/LICENSE) for additional details.
 
 
 
