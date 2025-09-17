@@ -1,0 +1,73 @@
+# This project uses PEP 621 metadata and setuptools with a src/ layout.
+# Install directly from GitHub, e.g.:
+#   pip install "nifrec @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
+# Or with optional extras (e.g., RDKit):
+#   pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
+
+[build-system]
+requires = [
+  "setuptools>=69",
+  "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nifrec"
+version = "1.0.0"
+description = "NIFREC: tools for automated geometry optimization workflows for molecular ground states (RDKit, xTB, Gaussian, and parsing)."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Hideya Tanaka" },
+  { name = "Tomoyuki Miyao" }
+]
+keywords = [
+  "automation",
+  "descriptor",
+  "quantum chemistry",
+  "chemoinformatics",
+  "DFT calculations"
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Chemistry"
+]
+# Dependencies are derived from environment.yml. Some packages (e.g., RDKit, xTB)
+# are typically installed via conda; see optional-dependencies and notes below.
+dependencies = [
+  "numpy",
+  "pandas",
+  "cclib==1.8.1",
+  "joblib",
+  "periodictable",
+  "morfeus-ml==0.7.2"
+]
+
+[project.optional-dependencies]
+# RDKit wheels are available on PyPI for some platforms but may lag releases.
+# Prefer conda-forge for RDKit if you encounter platform issues.
+chem = [
+  "rdkit>=2024.9"
+]
+# xTB is a compiled codebase typically provided via conda (conda-forge::xtb)
+# or system package managers. It is intentionally not specified as a PyPI
+# dependency here.
+
+[project.urls]
+Homepage = "https://github.com/tanaka-hideya/NIFREC"
+Repository = "https://github.com/tanaka-hideya/NIFREC.git"
+Issues = "https://github.com/tanaka-hideya/NIFREC/issues"
+
+[tool.setuptools]
+# Use src/ layout
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["nifrec*"]
