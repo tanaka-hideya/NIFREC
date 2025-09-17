@@ -5,9 +5,9 @@ dependencies:
 - python >= 3.12
 - rdkit >= 2024.09.03
 - numpy
+- pandas
 - cclib=1.8.1
 - joblib
 - periodictable
 - morfeus-ml=0.7.2
 - xtb=6.7.1
-- setuptools=79.0.1
