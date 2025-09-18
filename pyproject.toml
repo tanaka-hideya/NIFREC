@@ -5,10 +5,7 @@
 #   pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
 
 [build-system]
-requires = [
-  "setuptools>=69",
-  "wheel"
-]
+requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -27,7 +24,8 @@ keywords = [
   "descriptor",
   "quantum chemistry",
   "chemoinformatics",
-  "DFT calculations"
+  "DFT calculation",
+  "imaginary frequency"
 ]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -53,7 +51,7 @@ dependencies = [
 # RDKit wheels are available on PyPI for some platforms but may lag releases.
 # Prefer conda-forge for RDKit if you encounter platform issues.
 chem = [
-  "rdkit>=2024.9"
+  "rdkit>=2024.9.3"
 ]
 # xTB is a compiled codebase typically provided via conda (conda-forge::xtb)
 # or system package managers. It is intentionally not specified as a PyPI
