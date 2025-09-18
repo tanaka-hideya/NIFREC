@@ -1,74 +1,162 @@
-# NIFREC library 
-XXX Brief explanation of the libray 
+# NIFREC: Automated geometry optimization workflows for ground-state molecules
+
+Tools to generate conformers (RDKit), optimize and analyze vibrations (xTB), run Gaussian opt+freq with robust imaginary-frequency remediation, and parse Gaussian results.
+
+Version: 1.0.0
 
 ## Authors
-- Hideya Tanka @ Nara Institute of Science and Technology (Author)
+- Hideya Tanaka @ Nara Institute of Science and Technology (Author)
 - Tomoyuki Miyao @ Nara Institute of Science and Technology (Contributor)
 
-# Installation
-Conda creates virtual enviroment (nifrec) to run the codes. Gaussian16 is installed and paths are set approprietely. 
+## Requirements
+- Python 3.12+
+- For Gaussian step: a working Gaussian16 installation (g16 available on PATH)
+- Conda (recommended) for installing compiled dependencies such as xTB and RDKit
 
-0. Update conda 
-```bash 
-conda update -n base -c conda-forge conda
+## Installation
+
+Two equivalent methods are provided.
+
+### Method A: Install into an existing environment (pip + conda for xTB)
+1) Install the package from GitHub (with optional chem extras for RDKit):
+
+```bash
+pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
 ```
 
-1. Create virtual environment
+2) Install xTB via conda (version pinned to environment.yml):
+
+```bash
+conda install -c conda-forge xtb=6.7.1
+```
+
+Notes
+- If RDKit installation via pip on your platform fails, install the base package without extras and use conda for RDKit as well:
+
+  ```bash
+  pip install "nifrec @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
+  conda install -c conda-forge rdkit>=2024.09.03 xtb=6.7.1
+  ```
+
+### Method B: Clone + conda environment + package only (no deps)
+1) Create environment from the repository and activate it:
+
 ```bash
 git clone https://github.com/tanaka-hideya/NIFREC.git
 cd NIFREC
 conda env create -f environment.yml
-```
-
-2. Activate the `nifrec` environment and add the script folder to the `PYTHOPATH`
-```bash
 conda activate nifrec
-NIFRECDIR=$(pwd)
-export PYTHONPATH="$PYTHONPATH:$NIFRECDIR/src/nifrec"
 ```
 
-3. Test whether modules can be loaded.
-```bash
-python -m 1_1_nifrec_rdkit --help
-```
-Then, following output shows
-
-```
-usage: nifrec_rdkit [-h] [--infile INFILE] [--smicol SMICOL] [--idxcol IDXCOL] [--outfolder OUTFOLDER] [--outfile OUTFILE]
-                    [--nconfs NCONFS] [--rmsd-thres RMSD_THRES] [--njobs NJOBS] [--backend BACKEND]
-
-Conformer generator using RDKit
-
-options:
-  -h, --help            show this help message and exit
-  --infile INFILE       Input csv filename
-  --smicol SMICOL       Smiles column for structure generation
-  --idxcol IDXCOL       Index column idx (0 starts)
-  --outfolder OUTFOLDER
-                        Output folder where conformers are stored
-  --outfile OUTFILE     Output csv filename without extension (i.e. csv)
-  --nconfs NCONFS       Number of maximum conformers to be generated
-  --rmsd-thres RMSD_THRES
-                        RMSD threshold between generated conformers
-  --njobs NJOBS         Number of parallel computation threads (-1 means all cores)
-  --backend BACKEND     Parallel computation backend (loky or multiprocessing)
-```
-
-# Running geometry optimization using an example file.
-From the SMILES strings in `data/sample.csv`, conformer generation and optimization will be conducted.
+2) Install the package only (skip dependencies already provided by the environment):
 
 ```bash
-mkdir results
+pip install "nifrec @ git+https://github.com/tanaka-hideya/NIFREC.git@main" --no-deps
 ```
 
-## Step 1: RDkit conformre generation
+Explanation: --no-deps installs the nifrec package itself without pulling dependencies from PyPI. This is correct when your environment already contains the required dependencies (as ensured by environment.yml).
+
+No PYTHONPATH setup is required. Command-line entry points are provided via [project.scripts].
+
+## Command-line tools
+Installed scripts (see pyproject.toml):
+- nifrec-rdkit — RDKit conformer generation
+- nifrec-xtb — xTB optimization and vibrational analysis with automatic handling of small imaginary frequencies
+- nifrec-gaussian-optfreq — Gaussian opt+freq runs with robust imaginary-frequency remediation
+- nifrec-gaussian-parse — Parser for Gaussian logs and summary CSV aggregation
+
+Tip: Append --help to any command for full options, e.g.:
+
+```bash
+nifrec-rdkit --help
 ```
-python -m 1_1_nifrec_rdkit --infile data/sample.csv --smicol smi --outfolder results/rdkit-confgen --backend multiprocessing
+
+Key nifrec-rdkit options (summary)
+- --outfolder-rdkit PATH (required): output folder; created if missing
+- --infile FILE (required): input CSV file containing SMILES
+- --smicol NAME: SMILES column name (default: smiles)
+- --idxcol N: zero-based index column to use as unique identifier (default: 0)
+
+## Quick start with the sample dataset
+This section demonstrates the full pipeline in the current directory. Before starting, place the sample CSV in the working directory:
+
+- Option 1 (download):
+
+  ```bash
+  curl -L https://raw.githubusercontent.com/tanaka-hideya/NIFREC/main/data/sample.csv -o sample.csv
+  ```
+
+- Option 2 (if you cloned the repo):
+
+  ```bash
+  cp data/sample.csv ./sample.csv
+  ```
+
+The sample CSV uses columns: name, smi.
+
+### Step 1 — RDKit conformer generation
+
+Generate 3D conformers from SMILES. The sample file uses column "smi" for SMILES and the first column (index 0) as a unique identifier used for file naming.
+
+```bash
+nifrec-rdkit --outfolder-rdkit rdkit --infile sample.csv --smicol smi
 ```
-Then, you can find the `rdkit-confgen` folder under the `results` directory, where the conformation generation results are stored.
+
+Outputs
+- ./rdkit/xyz: conformer XYZ files named rdkit_<id>_<confid>.xyz
+- ./rdkit/sdf: 2D connectivity SDF files
+- ./rdkit/rdkit_stats.csv: summary CSV
+
+### Step 2 — xTB optimization and vibrational analysis
+
+Optimize each RDKit conformer with xTB, iteratively handling small imaginary frequencies, and record the lowest-energy conformer per molecule.
+
+```bash
+nifrec-xtb --outfolder-xtb xtb --infolder-rdkit rdkit
+```
+
+Outputs
+- ./xtb/opt, ./xtb/imag_freq, ./xtb/working, ./xtb/worker: run artifacts and logs
+- ./xtb/xtbopt_emin_xyz: XYZ files for the minimum-energy conformers (per molecule)
+- ./xtb/xTB_stats_Emin.csv: per-molecule minima
+- ./xtb/xTB_stats_all.csv: all conformers
+
+### Step 3 — Gaussian opt+freq with imaginary-frequency remediation
+
+Requires Gaussian16 (g16) in PATH. The route section is built as: "#p <theory-level> opt freq=noraman". Do not include opt/freq in --theory-level.
+
+```bash
+nifrec-gaussian-optfreq --outfolder-gaussian gaussian_optfreq_M062X_Def2TZVP --infolder-xtb xtb --suffix optfreq_M062X_Def2TZVP --theory-level "M062X/Def2TZVP" --nproc 8 --mem 32
+```
+
+Outputs
+- ./gaussian_optfreq_M062X_Def2TZVP/gaussian_gjf_optfreq_M062X_Def2TZVP, ./gaussian_optfreq_M062X_Def2TZVP/gaussian_log_optfreq_M062X_Def2TZVP, ./gaussian_optfreq_M062X_Def2TZVP/gaussian_chk_optfreq_M062X_Def2TZVP: success artifacts
+- ./gaussian_optfreq_M062X_Def2TZVP/gaussian_imagf_optfreq_M062X_Def2TZVP: runs that retained imaginary frequencies (files renamed with suffixes)
+- ./gaussian_optfreq_M062X_Def2TZVP/gaussian_working_optfreq_M062X_Def2TZVP: working directory (contains only failed or still-problematic cases after completion)
+- ./gaussian_optfreq_M062X_Def2TZVP/gaussian_optfreq_M062X_Def2TZVP_stats.csv: run summary
+
+### Step 4 — Parse Gaussian results
+
+Parse Gaussian logs to extract energies and (for restricted methods) HOMO/LUMO. Use a different output filename to avoid overwriting the Gaussian summary.
+
+```bash
+nifrec-gaussian-parse --infolder-gaussian gaussian_optfreq_M062X_Def2TZVP　--infolder-gaussian-log gaussian_optfreq_M062X_Def2TZVP/gaussian_log_optfreq_M062X_Def2TZVP --infile gaussian_optfreq_M062X_Def2TZVP_stats.csv　--outfile gaussian_optfreq_M062X_Def2TZVP_parse.csv
+```
+
+Notes
+- For unrestricted (UHF) logs, append --no-homo-lumo to skip HOMO/LUMO extraction.
+
+## Tips and troubleshooting
+- Unique identifiers: The index column specified by --idxcol must uniquely identify molecules; it is used in filenames and CSV indices.
+- Parallelism: All heavy steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1).
+- RDKit/xTB install: If RDKit wheels from PyPI are unavailable for your platform, prefer conda-forge for rdkit and xtb.
+- Output folders: Each step creates its output folder with the exact path you specify; if the folder already exists, creation may fail. Use a fresh path or remove the existing directory before rerunning.
+
+## Citation
+If you use NIFREC in your work, please cite it. See [CITATION.cff](https://github.com/tanaka-hideya/NIFREC/blob/main/CITATION.cff) in this repository.
 
 ## License
-This project is licensed under the terms of the MIT license. See [LICENSE](https://github.com/tanaka-hideya/NIFREC/blob/main/LICENSE) for additional details.
+This project is licensed under the terms of the MIT license. See [LICENSE](https://github.com/tanaka-hideya/NIFREC/blob/main/LICENSE) for details.
 
 
 
