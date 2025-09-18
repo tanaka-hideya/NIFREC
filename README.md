@@ -1,4 +1,4 @@
-# NIFREC: An Automated Ground-State Structure Optimization with No Imaginary Frequency
+# NIFREC: An Automated Ground-State Structure Optimization Workflow with No Imaginary Frequencies
 
 NIFREC is an automated geometry optimization workflow for molecular ground states that incorporates an automated protocol for the elimination of imaginary frequencies. NIFREC enables sequential execution of conformer search and quantum chemical calculations across molecular datasets, automatically resolving imaginary frequencies at each stage of the workflow.  
 NIFREC provides tools to generate conformers (RDKit), optimize and analyze frequencies (xTB), run Gaussian opt+freq with robust imaginary-frequency remediation, and parse Gaussian results.
@@ -143,7 +143,7 @@ Outputs
 Parse Gaussian logs to extract energies and (for restricted methods) HOMO/LUMO. Use a different output filename to avoid overwriting the Gaussian summary.
 
 ```bash
-nifrec-gaussian-parse --infolder-gaussian gaussian_optfreq_M062X_Def2TZVP　--infolder-gaussian-log gaussian_optfreq_M062X_Def2TZVP/gaussian_log_optfreq_M062X_Def2TZVP --infile gaussian_optfreq_M062X_Def2TZVP_stats.csv　--outfile gaussian_optfreq_M062X_Def2TZVP_parse.csv
+nifrec-gaussian-parse --infolder-gaussian gaussian_optfreq_M062X_Def2TZVP --infolder-gaussian-log gaussian_optfreq_M062X_Def2TZVP/gaussian_log_optfreq_M062X_Def2TZVP --infile gaussian_optfreq_M062X_Def2TZVP_stats.csv --outfile gaussian_optfreq_M062X_Def2TZVP_parse.csv
 ```
 
 Notes
@@ -151,7 +151,7 @@ Notes
 
 ## Tips and troubleshooting
 - Unique identifiers: The index column specified by --idxcol must uniquely identify molecules; it is used in filenames and CSV indices.
-- Parallelism: All heavy steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1).
+- Parallelism: Heavy steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1).
 - RDKit/xTB install: If RDKit wheels from PyPI are unavailable for your platform, prefer conda-forge for rdkit and xtb.
 - Output folders: Each step creates its output folder with the exact path you specify; if the folder already exists, creation may fail. Use a fresh path or remove the existing directory before rerunning.
 
