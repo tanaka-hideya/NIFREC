@@ -1,6 +1,7 @@
-# NIFREC: Automated geometry optimization workflows for ground-state molecules
+# NIFREC: An Automated Ground-State Structure Optimization with No Imaginary Frequency
 
-Tools to generate conformers (RDKit), optimize and analyze vibrations (xTB), run Gaussian opt+freq with robust imaginary-frequency remediation, and parse Gaussian results.
+NIFREC is an automated geometry optimization workflow for molecular ground states that incorporates an automated protocol for the elimination of imaginary frequencies. NIFREC enables sequential execution of conformer search and quantum chemical calculations across molecular datasets, automatically resolving imaginary frequencies at each stage of the workflow.  
+NIFREC provides tools to generate conformers (RDKit), optimize and analyze frequencies (xTB), run Gaussian opt+freq with robust imaginary-frequency remediation, and parse Gaussian results.
 
 Version: 1.0.0
 
@@ -77,6 +78,8 @@ Key nifrec-rdkit options (summary)
 - --smicol NAME: SMILES column name (default: smiles)
 - --idxcol N: zero-based index column to use as unique identifier (default: 0)
 
+If any of the commands below fail to run, try adjusting your setuptools version.
+
 ## Quick start with the sample dataset
 This section demonstrates the full pipeline in the current directory. Before starting, place the sample CSV in the working directory:
 
@@ -103,7 +106,7 @@ nifrec-rdkit --outfolder-rdkit rdkit --infile sample.csv --smicol smi
 ```
 
 Outputs
-- ./rdkit/xyz: conformer XYZ files named rdkit_<id>_<confid>.xyz
+- ./rdkit/xyz: conformer XYZ files named rdkit_idx_confid.xyz
 - ./rdkit/sdf: 2D connectivity SDF files
 - ./rdkit/rdkit_stats.csv: summary CSV
 
@@ -123,7 +126,7 @@ Outputs
 
 ### Step 3 — Gaussian opt+freq with imaginary-frequency remediation
 
-Requires Gaussian16 (g16) in PATH. The route section is built as: "#p <theory-level> opt freq=noraman". Do not include opt/freq in --theory-level.
+Requires Gaussian16 (g16) in PATH. The route section is built as: "#p theory-level opt freq=noraman". Do not include opt/freq in --theory-level.
 
 ```bash
 nifrec-gaussian-optfreq --outfolder-gaussian gaussian_optfreq_M062X_Def2TZVP --infolder-xtb xtb --suffix optfreq_M062X_Def2TZVP --theory-level "M062X/Def2TZVP" --nproc 8 --mem 32
