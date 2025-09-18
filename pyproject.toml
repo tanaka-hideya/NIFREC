@@ -57,6 +57,12 @@ chem = [
 # or system package managers. It is intentionally not specified as a PyPI
 # dependency here.
 
+[project.scripts]
+nifrec-rdkit = "nifrec.nifrec_rdkit:main"
+nifrec-xtb = "nifrec.nifrec_xtb:main"
+nifrec-gaussian-optfreq = "nifrec.nifrec_gaussian_optfreq:main"
+nifrec-gaussian-parse = "nifrec.nifrec_gaussian_parse:main"
+
 [project.urls]
 Homepage = "https://github.com/tanaka-hideya/NIFREC"
 Repository = "https://github.com/tanaka-hideya/NIFREC.git"
