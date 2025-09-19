@@ -19,8 +19,7 @@ Version: 1.0.0
 1) Create environment from the repository and activate it:
 
 ```bash
-git clone https://github.com/tanaka-hideya/NIFREC.git
-cd NIFREC
+curl -L https://raw.githubusercontent.com/tanaka-hideya/NIFREC/main/environment.yml -o environment.yml
 conda env create -f environment.yml
 conda activate nifrec
 ```
@@ -60,7 +59,7 @@ If any of the commands below fail to run, try adjusting your setuptools version.
 This section demonstrates the full pipeline in the current directory. Before starting, place the sample CSV in the working directory:
 
   ```bash
-  cp data/sample.csv ./sample.csv
+  curl -L https://raw.githubusercontent.com/tanaka-hideya/NIFREC/main/data/sample.csv -o sample.csv
   ```
 
 The sample CSV uses columns: name, smi.
@@ -68,6 +67,8 @@ The sample CSV uses columns: name, smi.
 ### Step 1 — RDKit conformer generation
 
 Generate 3D conformers from SMILES. The sample file uses column "smi" for SMILES and the first column (index 0) as a unique identifier used for file naming.
+
+Implementation note: Conformer generation leverages the MORFEUS library (ConformerEnsemble) on top of RDKit for ensemble creation, RMSD-based pruning, and sorting before export.
 
 ```bash
 nifrec-rdkit --outfolder-rdkit rdkit --infile sample.csv --smicol smi
@@ -86,6 +87,15 @@ Optimize each RDKit conformer with xTB, iteratively handling small imaginary fre
 nifrec-xtb --outfolder-xtb xtb --infolder-rdkit rdkit
 ```
 
+xTB command line (default method: GFN2-xTB)
+
+xtb input.xyz --ohess --chrg formal_charge --json
+
+Details
+- The formal charge is taken from the RDKit molecule.
+- Frequencies are obtained via --ohess and parsed from the JSON output produced by --json.
+- When significant imaginary modes remain, the same command is re-run on the distorted geometry file written by xTB (xtbhess.xyz) until convergence or the iteration limit is reached.
+
 Outputs
 - ./xtb/opt, ./xtb/imag_freq, ./xtb/working, ./xtb/worker: run artifacts and logs
 - ./xtb/xtbopt_emin_xyz: XYZ files for the minimum-energy conformers (per molecule)
@@ -97,7 +107,7 @@ Outputs
 Requires Gaussian16 (g16) in PATH. The route section is built as: "#p theory-level opt freq=noraman". Do not include opt/freq in --theory-level.
 
 ```bash
-nifrec-gaussian-optfreq --outfolder-gaussian gaussian_optfreq_M062X_Def2TZVP --infolder-xtb xtb --suffix optfreq_M062X_Def2TZVP --theory-level "M062X/Def2TZVP" --nproc 8 --mem 32
+nifrec-gaussian-optfreq --outfolder-gaussian gaussian_optfreq_M062X_Def2TZVP --infolder-xtb xtb --suffix optfreq_M062X_Def2TZVP --theory-level M062X/Def2TZVP --nproc 8 --mem 32
 ```
 
 Outputs

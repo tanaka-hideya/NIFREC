@@ -84,8 +84,8 @@ def write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xy
         f.write('\n')
 
 
-def run_gaussian(gname):
-    command = f'g16 {gname}.gjf'
+def run_gaussian(gname, gcmd):
+    command = f'{gcmd} {gname}.gjf'
     try:
         subprocess.run(command, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
@@ -126,7 +126,7 @@ def move_imag_dir(imagfoutfd, gname, suffix):
     return True, logfilepath, chkfilepath
 
 
-def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum):
+def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd):
 
     gname = filepath.replace('xTB', 'g').replace('.xyz', '')
     logpath = f'{gname}.log'
@@ -144,7 +144,7 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     route_section = f'#p {level_of_theory} opt freq=noraman'
     write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data)
     
-    flag_rg = run_gaussian(gname)
+    flag_rg = run_gaussian(gname, gcmd)
     if not flag_rg:
         return None, False, None, None
         
@@ -163,7 +163,7 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     route_section_rcfc = f'#p {level_of_theory} opt=RCFC freq=noraman Guess=Read Geom=AllCheck'
     write_gjf(njobs, mem, gname, route_section_rcfc, '', '', '', '', chkfilepath_0)
     
-    flag_rg = run_gaussian(gname)
+    flag_rg = run_gaussian(gname, gcmd)
     if not flag_rg:
         return None, False, None, None
         
@@ -195,7 +195,7 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
 
         write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data_i)
         
-        flag_rg = run_gaussian(gname)
+        flag_rg = run_gaussian(gname, gcmd)
         if not flag_rg:
             return None, False, None, None
             
@@ -212,7 +212,7 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     return None, False, None, -1
 
 
-def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True):
+def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
     print(f'Gaussian calculation (opt freq)')
     print('========== Settings ==========')
     print(f'outfolder-gaussian: {outfd}')
@@ -272,7 +272,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
         with open(f'{outfd}/log_gaussian_worker_{keyword}.txt', 'w') as f:
             print(f'Processing {worker_id+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
             
-        logpath, is_success, success_stage, success_disploop = run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum)
+        logpath, is_success, success_stage, success_disploop = run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd)
 
         if is_success:
             status_dict[number] = {'smiles': smiles,
@@ -397,6 +397,11 @@ def _parse_cli_args(argv=None):
                     "of the single most negative imaginary frequency, then normalize."),
                      action='store_false',
                      )
+    parser.add_argument('--gcmd',
+                     help="Command to the Gaussian executable. 'gcmd gname.gjf' (default: g16)",
+                     type=str,
+                     default='g16',
+                     )
     return parser.parse_args(argv)
 
 
@@ -406,7 +411,7 @@ def main(argv=None):
     infd = str(Path(args.infolder_xtb).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_gaussian.txt', 'w')
-    process_rows_for_goptfreq(outfd, infd, args.infile, args.suffix, args.theory_level, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec)
+    process_rows_for_goptfreq(outfd, infd, args.infile, args.suffix, args.theory_level, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
     print('Finish')
     sys.stdout.close()
     
