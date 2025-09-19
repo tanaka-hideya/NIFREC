@@ -225,6 +225,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
     print(f'base-disp: {base_disp}')
     print(f'max-repeat: {max_repeat}')
     print(f'imag-vec: {imag_vec_sum}')
+    print(f'gcmd: {gcmd}')
     print('------------------------------')
     
     file_path_input = f'{infd}/{infile}'
