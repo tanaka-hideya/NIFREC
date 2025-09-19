@@ -250,29 +250,29 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--infile',
-                     help="Name of the input CSV file (RDKit summary) located under --infolder-rdkit.",
+                     help="Name of the input CSV file (RDKit summary) located under --infolder-rdkit. (default: rdkit_stats.csv)",
                      type=str,
                      default='rdkit_stats.csv',
                      )
     parser.add_argument('--outfile',
-                     help='Name of the output CSV file to write summary (saved under --outfolder-xtb).',
+                     help='Name of the output CSV file to write summary (saved under --outfolder-xtb). (default: xTB_stats_Emin.csv)',
                      type=str,
                      default='xTB_stats_Emin.csv',
                      )
     parser.add_argument('--outfile-allresults',
-                     help='Name of the output CSV file to write all results (saved under --outfolder-xtb).',
+                     help='Name of the output CSV file to write all results (saved under --outfolder-xtb). (default: xTB_stats_all.csv)',
                      type=str,
                      default='xTB_stats_all.csv',
                      )
     parser.add_argument('--max-nconfs',
-                     help='Maximum number of conformers to be optimized with xTB per molecule',
+                     help='Maximum number of conformers to be optimized with xTB per molecule. (default: 20)',
                      type=int,
                      default=20,
                      )
     parser.add_argument('--max-repeat',
                 help=("Upper bound on iterations to resolve residual imaginary frequencies after xTB optimization "
                     "by following the distorted structure."
-                    " Larger values allow more retries; set small to limit runtime (positive integer)."),
+                    " Larger values allow more retries; set small to limit runtime (positive integer). (default: 50)"),
                      type=int,
                      default=50,
                      )
@@ -281,17 +281,17 @@ def _parse_cli_args(argv=None):
                    "Modes with |freq| <= threshold are treated as numerical noise. "
                    "Negative modes with |freq| > threshold are considered imaginary. "
                    "Applies both to the iterative re-optimization and final classification. "
-                   "Default 5.0 cm^-1."),
+                   "(default: 5.0)"),
                      type=float,
                      default=5.0,
                      )
     parser.add_argument('--njobs',
-                     help='Number of parallel workers. If <= 0, uses (CPU cores - 1).',
+                     help='Number of parallel workers. If <= 0, uses (CPU cores - 1). (default: -1)',
                      type=int,
                      default=-1,
                      )
     parser.add_argument('--backend',
-                     help="Parallel backend for joblib. One of: 'loky' (default), 'multiprocessing', 'threading'.",
+                     help="Parallel backend for joblib. One of: 'loky' (default), 'multiprocessing', 'threading'. (default: loky)",
                      type=str,
                      default='loky',
                      )

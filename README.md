@@ -1,7 +1,7 @@
 # NIFREC: An Automated Ground-State Structure Optimization Workflow with No Imaginary Frequencies
 
 NIFREC is an automated geometry optimization workflow for molecular ground states that incorporates an automated protocol for the elimination of imaginary frequencies. NIFREC enables sequential execution of conformer search and quantum chemical calculations across molecular datasets, automatically resolving imaginary frequencies at each stage of the workflow.  
-NIFREC provides tools to generate conformers (RDKit), optimize and analyze frequencies (xTB), run Gaussian opt+freq with robust imaginary-frequency remediation, and parse Gaussian results.
+NIFREC provides tools to generate conformers (RDKit), optimize geometries and analyze frequencies (xTB), run Gaussian opt+freq with robust imaginary-frequency remediation, and parse Gaussian results.
 
 Version: 1.0.0
 
@@ -11,35 +11,11 @@ Version: 1.0.0
 
 ## Requirements
 - Python 3.12+
+- See `environment.yml` for full list and version details.
 - For Gaussian step: a working Gaussian16 installation (g16 available on PATH)
-- Conda (recommended) for installing compiled dependencies such as xTB and RDKit
 
 ## Installation
 
-Two equivalent methods are provided.
-
-### Method A: Install into an existing environment (pip + conda for xTB)
-1) Install the package from GitHub (with optional chem extras for RDKit):
-
-```bash
-pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
-```
-
-2) Install xTB via conda (version pinned to environment.yml):
-
-```bash
-conda install -c conda-forge xtb=6.7.1
-```
-
-Notes
-- If RDKit installation via pip on your platform fails, install the base package without extras and use conda for RDKit as well:
-
-  ```bash
-  pip install "nifrec @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
-  conda install -c conda-forge rdkit>=2024.09.03 xtb=6.7.1
-  ```
-
-### Method B: Clone + conda environment + package only (no deps)
 1) Create environment from the repository and activate it:
 
 ```bash
@@ -55,12 +31,12 @@ conda activate nifrec
 pip install "nifrec @ git+https://github.com/tanaka-hideya/NIFREC.git@main" --no-deps
 ```
 
-Explanation: --no-deps installs the nifrec package itself without pulling dependencies from PyPI. This is correct when your environment already contains the required dependencies (as ensured by environment.yml).
+Explanation: --no-deps installs the nifrec package itself without pulling dependencies from PyPI.
 
 No PYTHONPATH setup is required. Command-line entry points are provided via [project.scripts].
 
 ## Command-line tools
-Installed scripts (see pyproject.toml):
+Installed scripts (see [pyproject.toml](https://github.com/tanaka-hideya/NIFREC/blob/main/pyproject.toml)):
 - nifrec-rdkit — RDKit conformer generation
 - nifrec-xtb — xTB optimization and vibrational analysis with automatic handling of small imaginary frequencies
 - nifrec-gaussian-optfreq — Gaussian opt+freq runs with robust imaginary-frequency remediation
@@ -82,14 +58,6 @@ If any of the commands below fail to run, try adjusting your setuptools version.
 
 ## Quick start with the sample dataset
 This section demonstrates the full pipeline in the current directory. Before starting, place the sample CSV in the working directory:
-
-- Option 1 (download):
-
-  ```bash
-  curl -L https://raw.githubusercontent.com/tanaka-hideya/NIFREC/main/data/sample.csv -o sample.csv
-  ```
-
-- Option 2 (if you cloned the repo):
 
   ```bash
   cp data/sample.csv ./sample.csv
@@ -152,7 +120,6 @@ Notes
 ## Tips and troubleshooting
 - Unique identifiers: The index column specified by --idxcol must uniquely identify molecules; it is used in filenames and CSV indices.
 - Parallelism: Heavy steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1).
-- RDKit/xTB install: If RDKit wheels from PyPI are unavailable for your platform, prefer conda-forge for rdkit and xtb.
 - Output folders: Each step creates its output folder with the exact path you specify; if the folder already exists, creation may fail. Use a fresh path or remove the existing directory before rerunning.
 
 ## Citation

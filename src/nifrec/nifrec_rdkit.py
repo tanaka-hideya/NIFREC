@@ -34,7 +34,7 @@ def write_mols_to_sdf(mol_list, sdf_name):
     w.close()
 
 
-def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, thres, njobs=-1, backend='loky', smicol='smiles', idxcol=0):
+def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, thres, njobs=-1, backend='loky', smicol='smiles', idxcol=0, random_seed=42, force_field='MMFF94s'):
     print(f'Conformer generation using RDKit')
     print('========== Settings ==========')
     print(f'outfolder-rdkit: {outfd}')
@@ -46,6 +46,8 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     print(f'rmsd-thres: {thres}')
     print(f'njobs: {njobs}')
     print(f'backend: {backend}')
+    print(f'random-seed: {random_seed}')
+    print(f'force-field: {force_field}')
     print('------------------------------')
     
     original_df = pd.read_csv(file_path_input, index_col=idxcol)
@@ -62,8 +64,6 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     # Parallel calculation setting     
     njobs = cpu_count() -1 if njobs < 1 else njobs
     batch_df = np.array_split(df, njobs)
-
-    random_seed = 42
     
     # Both sdf and xyz are necessary to reproduce molecule after coordinate optimization.
     outfd_xyz = f'{outfd}/xyz'
@@ -72,7 +72,7 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     os.makedirs(outfd_xyz)
     os.makedirs(outfd_sdf)
     os.makedirs(outfd_worker)
-    status_df_list = Parallel(n_jobs=njobs, backend=backend)([delayed(generate_conf_rdkit)(wid, batch[smicol], n_confs, random_seed, thres, outfd_xyz, outfd_sdf, outfd_worker) for wid, batch in enumerate(batch_df)])
+    status_df_list = Parallel(n_jobs=njobs, backend=backend)([delayed(generate_conf_rdkit)(wid, batch[smicol], n_confs, random_seed, thres, outfd_xyz, outfd_sdf, outfd_worker, force_field) for wid, batch in enumerate(batch_df)])
     status_df = pd.concat(status_df_list)
     combined_df = pd.concat([original_df, status_df], ignore_index=False, axis=1)
     if combined_df[smicol].equals(combined_df['smiles_input_rdkit_confgen']):
@@ -90,7 +90,7 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     combined_df.to_csv(f'{outfd}/{file_path_output}')
 
 
-def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xyz, outfd_sdf, outfd_worker):
+def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xyz, outfd_sdf, outfd_worker, force_field):
     ntotal = len(pds_smiles)
     status_dict = dict()
     for idx, (number,smiles) in enumerate(pds_smiles.items()):
@@ -98,7 +98,7 @@ def generate_conf_rdkit(workerid, pds_smiles, nconfs, rseed, rmsdthres, outfd_xy
             print(f'Processing {idx+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
 
         try:
-            ce = ConformerEnsemble.from_rdkit(smiles, n_confs=nconfs, optimize='MMFF94', random_seed=rseed, rmsd_thres=0)
+            ce = ConformerEnsemble.from_rdkit(smiles, n_confs=nconfs, optimize=force_field, random_seed=rseed, rmsd_thres=0)
             ce.prune_rmsd(thres=rmsdthres)
             ce.sort()
             n_conformer = len(ce)
@@ -132,43 +132,53 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--smicol',
-                     help='Name of the column in the input CSV that contains SMILES strings (used for structure generation).',
+                     help='Name of the column in the input CSV that contains SMILES strings (used for structure generation). (default: smiles)',
                      type=str,
                      default='smiles',
                      )
     parser.add_argument('--idxcol',
                help=('Zero-based index of the column in the input CSV to use as the unique molecule identifier (DataFrame index). '
                    'Identifiers must be unique per molecule and are used consistently across all outputs: the output CSV (--outfile) '
-                   'and the filenames of 3D structure files (XYZ/SDF). Non-unique values may cause file overwrites and inconsistent results.'),
+                   'and the filenames of 3D structure files (XYZ/SDF). Non-unique values may cause file overwrites and inconsistent results. (default: 0)'),
                      type=int,
                      default=0,
                      )
     parser.add_argument('--outfile',
                help=("Name of the output CSV file to write summary (saved under --outfolder-rdkit). "
                    "Note: If the SMILES column specified by --smicol is not named 'smiles', it will be renamed to 'smiles' in the output CSV "
-                   "(unless a 'smiles' column already exists). Canonical smiles are stored in the 'smiles' column."),
+                   "(unless a 'smiles' column already exists). Canonical smiles are stored in the 'smiles' column. (default: rdkit_stats.csv)"),
                      type=str,
                      default='rdkit_stats.csv',
                      )
     parser.add_argument('--nconfs',
-                     help='Maximum number of RDKit conformers to generate per molecule.',
+                     help='Maximum number of RDKit conformers to generate per molecule. (default: 20)',
                      type=int,
                      default=20,
                      )
     parser.add_argument('--rmsd-thres',
-                     help='RMSD pruning threshold between generated conformers.',
+                     help='RMSD pruning threshold between generated conformers. (default: 1)',
                      type=float,
                      default=1,
                      )
     parser.add_argument('--njobs',
-                     help='Number of parallel workers. If <= 0, uses (CPU cores - 1).',
+                     help='Number of parallel workers. If <= 0, uses (CPU cores - 1). (default: -1)',
                      type=int,
                      default=-1,
                      )
     parser.add_argument('--backend',
-                     help="Parallel backend for joblib. One of: 'loky' (default), 'multiprocessing', 'threading'.",
+                     help="Parallel backend for joblib. One of: 'loky' (default), 'multiprocessing', 'threading'. (default: loky)",
                      type=str,
                      default='loky',
+                     )
+    parser.add_argument('--random-seed',
+                     help="Random seed for reproducibility. (default: 42)",
+                     type=int,
+                     default=42,
+                     )
+    parser.add_argument('--force-field',
+                     help="Force field to use for RDKit conformer generation (MMFF94s, MMFF94, or UFF). (default: MMFF94s)",
+                     type=str,
+                     default='MMFF94s',
                      )
     return parser.parse_args(argv)
 
@@ -179,7 +189,7 @@ def main(argv=None):
     infile = str(Path(args.infile).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_rdkit.txt', 'w')
-    process_rows_for_rdkit(outfd, infile, args.outfile, args.nconfs, args.rmsd_thres, njobs=args.njobs, backend=args.backend, smicol=args.smicol, idxcol=args.idxcol)
+    process_rows_for_rdkit(outfd, infile, args.outfile, args.nconfs, args.rmsd_thres, njobs=args.njobs, backend=args.backend, smicol=args.smicol, idxcol=args.idxcol, random_seed=args.random_seed, force_field=args.force_field)
     print('Finish')
     sys.stdout.close()
     

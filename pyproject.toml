@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nifrec"
 version = "1.0.0"
-description = "NIFREC: tools for automated geometry optimization workflows for molecular ground states (RDKit, xTB, Gaussian, and parsing)."
+description = "NIFREC: an automated geometry optimization workflow for molecular ground states that incorporates an automated protocol for the elimination of imaginary frequencies (RDKit, xTB, Gaussian, and parsing)."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.12"
 license = { file = "LICENSE" }

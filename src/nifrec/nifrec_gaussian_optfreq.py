@@ -343,29 +343,29 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--infile',
-                     help="Name of the input CSV file (xTB summary) located under --infolder-xtb.",
+                     help="Name of the input CSV file (xTB summary) located under --infolder-xtb. (default: xTB_stats_Emin.csv)",
                      type=str,
                      default='xTB_stats_Emin.csv',
                      )
     parser.add_argument('--suffix',
-                     help='Suffix used to identify output directories and files.',
+                     help='Suffix used to identify output directories and files. (default: optfreq)',
                      type=str,
                      default='optfreq',
                      )
     parser.add_argument('--theory-level',
                 help=("Calculation level and additional options (in route section) for Gaussian. (e.g. 'M062X/Def2SVP') "
                     "Do not include 'opt' or 'freq' keywords, as the job will automatically run with 'opt freq=noraman'. "
-                    "Use this field for other settings such as solvent effects."),
+                    "Use this field for other settings such as solvent effects. (default: M062X/Def2SVP)"),
                      type=str,
                      default='M062X/Def2SVP',
                      )
     parser.add_argument('--nproc',
-                     help='nprocshared in Gaussian. If <= 0, uses (CPU cores - 1).',
+                     help='nprocshared in Gaussian. If <= 0, uses (CPU cores - 1). (default: 4)',
                      type=int,
                      default=4,
                      )
     parser.add_argument('--mem',
-                     help="mem in Gaussian. It is recommended to set mem to '1-4GB * --nproc'.",
+                     help="mem in Gaussian. It is recommended to set mem to '1-4GB * --nproc'. (default: 16)",
                      type=int,
                      default=16,
                      )
@@ -376,7 +376,7 @@ def _parse_cli_args(argv=None):
                     "of this value (2 * base_disp, 3 * base_disp, …).  Typical choices "
                     "are 0.05-0.20 Å: smaller values may leave the structure in the "
                     "saddle region, whereas excessively large values risk overshooting "
-                    "the nearest minimum and destabilizing the optimization."),
+                    "the nearest minimum and destabilizing the optimization. (default: 0.1)"),
                      type=float,
                      default=0.1,
                      )
@@ -384,16 +384,16 @@ def _parse_cli_args(argv=None):
                 help=("Positive integer that sets the upper limit on the number of "
                     "iterative displacements applied when residual imaginary frequencies "
                     "persist after the RCFC re-optimization.  Each iteration increases "
-                    "the displacement magnitude by one increment of 'base_disp'."),
+                    "the displacement magnitude by one increment of 'base_disp'. (default: 5)"),
                      type=int,
                      default=5,
                      )
     parser.add_argument('--imag-vec',
                 help=("Boolean switch that selects how the displacement vector for "
                     "imaginary-frequency nudging is built. "
-                    "[True]  'sum' strategy (default): component-wise sum of all "
+                    "'sum' strategy (default): component-wise sum of all "
                     "imaginary-mode Cartesian displacement vectors, followed by L2 normalization.  "
-                    "[False (if specified)]  'largest' strategy: use only the displacement vector "
+                    "'largest' strategy (effective only with --imag-vec): use only the displacement vector "
                     "of the single most negative imaginary frequency, then normalize."),
                      action='store_false',
                      )
