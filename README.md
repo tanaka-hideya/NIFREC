@@ -49,7 +49,7 @@ nifrec-rdkit --help
 
 Then, the following output is shown:
 
-```bash
+```text
 usage: nifrec_rdkit [-h] --outfolder-rdkit OUTFOLDER_RDKIT --infile INFILE [--smicol SMICOL] [--idxcol IDXCOL] [--outfile OUTFILE] [--nconfs NCONFS]
                     [--rmsd-thres RMSD_THRES] [--njobs NJOBS] [--backend BACKEND] [--random-seed RANDOM_SEED] [--force-field FORCE_FIELD]
 
