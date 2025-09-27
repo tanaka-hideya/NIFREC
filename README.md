@@ -100,7 +100,7 @@ Implementation note: Conformer generation leverages the MORFEUS library (`Confor
 nifrec-rdkit --outfolder-rdkit rdkit --infile sample.csv --smicol smi
 ```
 
-Key Outputs
+Key outputs
 - ./rdkit/xyz: conformer XYZ files named rdkit_idx_confid.xyz
 - ./rdkit/rdkit_stats.csv: summary CSV
 
@@ -121,7 +121,7 @@ Details
 - Frequencies are obtained via --ohess and parsed from the JSON output produced by --json.
 - When significant imaginary modes remain, the same command is re-run on the distorted geometry file written by xTB (xtbhess.xyz) until convergence or the iteration limit is reached.
 
-Key Outputs
+Key outputs
 - ./xtb/xtbopt_emin_xyz: XYZ files for the minimum-energy conformers (per molecule)
 - ./xtb/xTB_stats_Emin.csv: summary of the minimum-energy conformer for each molecule
 
@@ -133,7 +133,7 @@ Requires Gaussian 16. The route section is built as: "#p theory-level opt freq=n
 nifrec-gaussian-optfreq --outfolder-gaussian gaussian_optfreq_PM6 --infolder-xtb xtb --suffix optfreq_PM6 --theory-level PM6 --nproc 8 --mem 32
 ```
 
-Key Outputs
+Key outputs
 - ./gaussian_optfreq_PM6/gaussian_gjf_optfreq_PM6, ./gaussian_optfreq_PM6/gaussian_log_optfreq_PM6, ./gaussian_optfreq_PM6/gaussian_chk_optfreq_PM6: artifacts from successful runs
 - ./gaussian_optfreq_PM6/gaussian_imagf_optfreq_PM6: runs that retained imaginary frequencies (files are renamed with suffixes)
 - ./gaussian_optfreq_PM6/gaussian_working_optfreq_PM6: working directory (contains only failed cases after completion)
@@ -147,7 +147,7 @@ Parse Gaussian log files to extract energies and, for restricted methods, HOMO/L
 nifrec-gaussian-parse --infolder-gaussian gaussian_optfreq_PM6 --infolder-gaussian-log gaussian_optfreq_PM6/gaussian_log_optfreq_PM6 --infile gaussian_optfreq_PM6_stats.csv --outfile gaussian_optfreq_PM6_parse.csv
 ```
 
-Key Output
+Key outputs
 - ./gaussian_optfreq_PM6/gaussian_optfreq_PM6_parse.csv: summary CSV
 
 Notes
