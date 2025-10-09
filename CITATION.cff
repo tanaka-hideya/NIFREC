@@ -13,6 +13,7 @@ authors:
     affiliation: Nara Institute of Science and Technology
 title: NIFREC
 version: 1.0.0
+doi: 10.5281/zenodo.17299289
 repository-code: https://github.com/tanaka-hideya/NIFREC
 license: MIT
 type: software

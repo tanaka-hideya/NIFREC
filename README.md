@@ -1,5 +1,7 @@
 # NIFREC: An Automated Ground-State Geometry Optimization Workflow with No Imaginary Frequencies
 
+[![DOI](https://zenodo.org/badge/990414067.svg)](https://zenodo.org/badge/latestdoi/990414067)
+
 NIFREC is an automated workflow for ground-state geometry optimization that includes an automated protocol to eliminate imaginary vibrational frequencies. NIFREC supports the sequential execution of conformer searches and quantum-chemical calculations across molecular datasets, automatically resolving imaginary frequencies at each stage of the workflow.  
 NIFREC provides tools to generate conformers (RDKit); optimize geometries and analyze vibrational frequencies (xTB); run Gaussian optimization and frequency (opt+freq) jobs with robust imaginary-frequency remediation; and parse Gaussian results.
 
