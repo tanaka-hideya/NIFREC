@@ -372,13 +372,13 @@ def _parse_cli_args(argv=None):
                      required=True,
                      )
     parser.add_argument('--infolder-xtb-xyz',
-                help=("Generates .gjf files by referencing the specified --infolder-xtb-xyz directory. (default: xtbopt_emin_xyz)"
+                help=("Generates .gjf files by referencing the specified --infolder-xtb-xyz directory. (default: xtbopt_emin_xyz) "
                     "Enter 'opt' to perform calculations on all conformers, obtained from the xTB workflow, that showed no imaginary frequencies."),
                      type=str,
                      default='xtbopt_emin_xyz',
                      )
     parser.add_argument('--infile',
-                help=("Name of the input .csv file (xTB summary) located under --infolder-xtb. (default: xTB_stats_Emin.csv)"
+                help=("Name of the input .csv file (xTB summary) located under --infolder-xtb. (default: xTB_stats_Emin.csv) "
                     "Enter the filename corresponding to the 'xTB_stats_all.csv' to perform calculations on all conformers, obtained from the xTB workflow, that showed no imaginary frequencies."),
                      type=str,
                      default='xTB_stats_Emin.csv',
