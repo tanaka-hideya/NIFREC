@@ -217,11 +217,12 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     return None, False, None, -1
 
 
-def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
+def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_theory, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
     print(f'Gaussian calculation (opt freq)')
     print('========== Settings ==========')
     print(f'outfolder-gaussian: {outfd}')
     print(f'infolder-xtb: {infd}')
+    print(f'infolder-xtb-xyz: {infd_xyz}')
     print(f'infile: {infile}')
     print(f'suffix: {keyword}')
     print(f'theory-level: {level_of_theory}')
@@ -234,7 +235,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
     print('------------------------------')
     
     file_path_input = f'{infd}/{infile}'
-    xtbxyzfd = f'{infd}/xtbopt_emin_xyz'
+    xtbxyzfd = f'{infd}/{infd_xyz}'
     file_path_output = f'{outfd}/gaussian_{keyword}_stats.csv'
 
     outputoutfd = f'{outfd}/gaussian_working_{keyword}'
@@ -269,6 +270,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
         
         number = row.Index
         smiles = row.smiles
+        molid = row.molid
         confid = row.confid
         energy_xtb = row.total_energy_xTB
         filepath  = row.filepath
@@ -282,6 +284,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
 
         if is_success:
             status_dict[number] = {'smiles': smiles,
+                                    'molid': molid,
                                     'confid': confid,
                                     'charge': charge,
                                     'multiplicity': multiplicity,
@@ -291,6 +294,7 @@ def process_rows_for_goptfreq(outfd, infd, infile, keyword, level_of_theory, mem
                                     'success_disploop': success_disploop}
         else:
             status_dict[number] = {'smiles': smiles,
+                                    'molid': molid,
                                     'confid': 0,
                                     'charge': charge,
                                     'multiplicity': multiplicity,
@@ -348,12 +352,19 @@ def _parse_cli_args(argv=None):
                      )
     parser.add_argument('--infolder-xtb',
                 help=("Input folder for loading xTB results (.xyz files). Accepts absolute or relative paths; '~' is expanded. "
-                    "Generates .gjf files by referencing the xtbopt_emin_xyz folder located inside the specified --infolder-xtb directory."),
+                    "Generates .gjf files by referencing the specified --infolder-xtb-xyz directory (default: xtbopt_emin_xyz) located inside the specified --infolder-xtb directory."),
                      type=str,
                      required=True,
                      )
+    parser.add_argument('--infolder-xtb-xyz',
+                help=("Generates .gjf files by referencing the specified --infolder-xtb-xyz directory. (default: xtbopt_emin_xyz)"
+                    "Enter 'opt' to perform calculations on all conformers, obtained from the xTB workflow, that showed no imaginary frequencies."),
+                     type=str,
+                     default='xtbopt_emin_xyz',
+                     )
     parser.add_argument('--infile',
-                     help="Name of the input .csv file (xTB summary) located under --infolder-xtb. (default: xTB_stats_Emin.csv)",
+                help=("Name of the input .csv file (xTB summary) located under --infolder-xtb. (default: xTB_stats_Emin.csv)"
+                    "Enter the filename corresponding to the 'xTB_stats_all.csv' to perform calculations on all conformers, obtained from the xTB workflow, that showed no imaginary frequencies."),
                      type=str,
                      default='xTB_stats_Emin.csv',
                      )
@@ -421,7 +432,7 @@ def main(argv=None):
     infd = str(Path(args.infolder_xtb).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_gaussian.txt', 'w')
-    process_rows_for_goptfreq(outfd, infd, args.infile, args.suffix, args.theory_level, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
+    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, args.suffix, args.theory_level, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
     print('Finish')
     sys.stdout.close()
     

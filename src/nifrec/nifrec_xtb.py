@@ -212,9 +212,10 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, imagfreq
             # Save generation information
             gen_xyz_path  = json_path.replace('.json', '.xyz') if json_path is not None else '' 
             status_all_dict[f'{number}_{confid}'] = {'smiles': smiles,
-                                        'no imaginary Freq': is_stable,
+                                        'molid': number,
+                                        'confid': confid if is_stable else 0,
                                         'total_energy_xTB': total_energy,
-                                        'filepath': gen_xyz_path}
+                                        'filepath': os.path.basename(gen_xyz_path)}
 
             if is_stable and (total_energy < emin_val):
                 emin_cidx = confid
@@ -222,6 +223,7 @@ def run_xtb_multi_files(workerid, mols, nconfmax, max_repeat, xyz_infd, imagfreq
                 emin_xyz_path = gen_xyz_path
 
         status_min_dict[number] = {'smiles_xTB': smiles,
+                                    'molid': number,
                                     'confid': emin_cidx,
                                     'total_energy_xTB': emin_val,
                                     'filepath': os.path.basename(emin_xyz_path)}
