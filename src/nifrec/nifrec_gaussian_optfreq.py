@@ -253,7 +253,7 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
     chkoutfd = f'{outfd}/gaussian_chk_{keyword}'
     imagfoutfd = f'{outfd}/gaussian_imagf_{keyword}'
     for path in (outputoutfd, gjfoutfd, logoutfd, chkoutfd, imagfoutfd):
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=False)
     
     pwd_prev = os.getcwd()
     os.chdir(outputoutfd) # Output files are stored in outputoutfd
@@ -265,7 +265,7 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
     
     if infile_gaussian_recalc:
         df_gaussian_recalc = pd.read_csv(infile_gaussian_recalc, index_col=0)
-        failed_idx = df_gaussian_recalc.index[df_gaussian_recalc['confid'] == 0]
+        failed_idx = df_gaussian_recalc[df_gaussian_recalc['confid'] == 0].index
         df = df.loc[failed_idx]
         print(f'All molecules selected for Gaussian recalculation (confid = 0) {len(df)}')
 

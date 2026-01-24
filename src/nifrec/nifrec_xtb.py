@@ -151,11 +151,11 @@ def process_rows_for_xtb(outfd, infd, infile, file_path_output_all, file_path_ou
     workingfd = f'{outfd}/working'
     workerfd = f'{outfd}/worker'
     opt_emin_outfd = f'{outfd}/xtbopt_emin_xyz'
-    os.makedirs(optoutfd)
-    os.makedirs(imagfreqoutfd)
-    os.makedirs(workingfd)
-    os.makedirs(workerfd)
-    os.makedirs(opt_emin_outfd)
+    os.makedirs(optoutfd, exist_ok=False)
+    os.makedirs(imagfreqoutfd, exist_ok=False)
+    os.makedirs(workingfd, exist_ok=False)
+    os.makedirs(workerfd, exist_ok=False)
+    os.makedirs(opt_emin_outfd, exist_ok=False)
     # xTB calculation
     status_all_df_list = []
     status_min_df_list = []

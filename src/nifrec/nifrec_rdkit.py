@@ -69,9 +69,9 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     outfd_xyz = f'{outfd}/xyz'
     outfd_sdf = f'{outfd}/sdf'
     outfd_worker = f'{outfd}/worker'
-    os.makedirs(outfd_xyz)
-    os.makedirs(outfd_sdf)
-    os.makedirs(outfd_worker)
+    os.makedirs(outfd_xyz, exist_ok=False)
+    os.makedirs(outfd_sdf, exist_ok=False)
+    os.makedirs(outfd_worker, exist_ok=False)
     status_df_list = Parallel(n_jobs=njobs, backend=backend)([delayed(generate_conf_rdkit)(wid, batch[smicol], n_confs, random_seed, thres, outfd_xyz, outfd_sdf, outfd_worker, force_field) for wid, batch in enumerate(batch_df)])
     status_df = pd.concat(status_df_list)
     combined_df = pd.concat([original_df, status_df], ignore_index=False, axis=1)
