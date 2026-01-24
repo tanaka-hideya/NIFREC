@@ -131,7 +131,7 @@ def move_imag_dir(imagfoutfd, gname, suffix):
     return True, logfilepath, chkfilepath
 
 
-def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd):
+def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, option_opt, option_freq, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd):
 
     gname = filepath.replace('xTB', 'g').replace('.xyz', '')
     logpath = f'{gname}.log'
@@ -146,7 +146,10 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     xyz_data = read_xyz(xtbpath)
     
     # ---------- Stage 0 ---------------------------------------------------
-    route_section = f'#p {level_of_theory} opt freq=noraman'
+    if option_opt:
+        route_section = f'#p {level_of_theory} opt=({option_opt}) freq{option_freq}'
+    else:
+        route_section = f'#p {level_of_theory} opt freq{option_freq}'
     write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data)
     
     flag_rg = run_gaussian(gname, gcmd)
@@ -165,7 +168,10 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
         return None, False, None, None
     
     # ---------- Stage 1 (RCFC) -------------------------------------------
-    route_section_rcfc = f'#p {level_of_theory} opt=RCFC freq=noraman Guess=Read Geom=AllCheck'
+    if option_opt:
+        route_section_rcfc = f'#p {level_of_theory} opt=(RCFC,{option_opt}) freq{option_freq} Guess=Read Geom=AllCheck'
+    else:
+        route_section_rcfc = f'#p {level_of_theory} opt=RCFC freq{option_freq} Guess=Read Geom=AllCheck'
     write_gjf(njobs, mem, gname, route_section_rcfc, '', '', '', '', chkfilepath_0)
     
     flag_rg = run_gaussian(gname, gcmd)
@@ -217,7 +223,7 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     return None, False, None, -1
 
 
-def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_theory, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
+def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_theory, option_opt, option_freq, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
     print(f'Gaussian calculation (opt freq)')
     print('========== Settings ==========')
     print(f'outfolder-gaussian: {outfd}')
@@ -226,6 +232,8 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_t
     print(f'infile: {infile}')
     print(f'suffix: {keyword}')
     print(f'theory-level: {level_of_theory}')
+    print(f'option-opt: {option_opt}')
+    print(f'option-freq: {option_freq}')
     print(f'nproc: {njobs}')
     print(f'mem: {mem}')
     print(f'base-disp: {base_disp}')
@@ -280,7 +288,7 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_t
         with open(f'{outfd}/log_gaussian_worker_{keyword}.txt', 'w') as f:
             print(f'Processing {worker_id+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
             
-        logpath, is_success, success_stage, success_disploop = run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd)
+        logpath, is_success, success_stage, success_disploop = run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, option_opt, option_freq, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd)
 
         if is_success:
             status_dict[number] = {'smiles': smiles,
@@ -380,6 +388,19 @@ def _parse_cli_args(argv=None):
                      type=str,
                      default='M062X/Def2SVP',
                      )
+    parser.add_argument('--option-opt',
+                help=("Options for Gaussian's 'opt' keyword. Write options like 'MaxStep=10'. "
+                    "Do not write '=MaxStep=10', '=(MaxStep=10)', or '(MaxStep=10)'. "
+                    "For multiple options, separate them with commas and do not add parentheses. (default: None)"),
+                     type=str,
+                     default=None,
+                     )
+    parser.add_argument('--option-freq',
+                help=("Options for Gaussian's 'freq' keyword. Unlike --option-opt, write the text that follows 'freq' as-is. "
+                    "(default: =noraman)"),
+                     type=str,
+                     default='=noraman',
+                     )
     parser.add_argument('--nproc',
                      help='nprocshared in Gaussian. If <= 0, uses (CPU cores - 1). (default: 4)',
                      type=int,
@@ -432,7 +453,7 @@ def main(argv=None):
     infd = str(Path(args.infolder_xtb).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_gaussian.txt', 'w')
-    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, args.suffix, args.theory_level, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
+    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, args.suffix, args.theory_level, args.option_opt, args.option_freq, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
     print('Finish')
     sys.stdout.close()
     
