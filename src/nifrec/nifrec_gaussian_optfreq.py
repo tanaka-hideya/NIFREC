@@ -223,13 +223,14 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     return None, False, None, -1
 
 
-def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_theory, option_opt, option_freq, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
+def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_recalc, keyword, level_of_theory, option_opt, option_freq, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
     print(f'Gaussian calculation (opt freq)')
     print('========== Settings ==========')
     print(f'outfolder-gaussian: {outfd}')
     print(f'infolder-xtb: {infd}')
     print(f'infolder-xtb-xyz: {infd_xyz}')
     print(f'infile: {infile}')
+    print(f'infile-gaussian-recalc: {infile_gaussian_recalc}')
     print(f'suffix: {keyword}')
     print(f'theory-level: {level_of_theory}')
     print(f'option-opt: {option_opt}')
@@ -261,6 +262,12 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, keyword, level_of_t
     print(f'All molecules in the dataset {len(df)}')
     df = df[df['confid'] != 0]
     print(f'All molecules successfully processed by xTB opt and freq calculations {len(df)}')
+    
+    if infile_gaussian_recalc:
+        df_gaussian_recalc = pd.read_csv(infile_gaussian_recalc, index_col=0)
+        failed_idx = df_gaussian_recalc.index[df_gaussian_recalc['confid'] == 0]
+        df = df.loc[failed_idx]
+        print(f'All molecules selected for Gaussian recalculation (confid = 0) {len(df)}')
 
     smicol = 'smiles'
     molcol = 'romol'
@@ -376,6 +383,14 @@ def _parse_cli_args(argv=None):
                      type=str,
                      default='xTB_stats_Emin.csv',
                      )
+    parser.add_argument('--infile-gaussian-recalc',
+                help=("Path to a previously generated Gaussian stats .csv file (e.g., gaussian_<suffix>_stats.csv) from a prior run of this script. "
+                    "If provided, only molecules with confid = 0 in that .csv file are recalculated. "
+                    "Use the same --infolder-xtb, --infolder-xtb-xyz, and --infile as the previous run, and specify a different --outfolder-gaussian. "
+                    "Accepts absolute or relative paths; '~' is expanded. (default: None)"),
+                     type=str,
+                     default=None,
+                     )
     parser.add_argument('--suffix',
                      help='Suffix used to identify output directories and files. (default: optfreq)',
                      type=str,
@@ -451,9 +466,10 @@ def main(argv=None):
     args = _parse_cli_args(argv)
     outfd = str(Path(args.outfolder_gaussian).expanduser().resolve())
     infd = str(Path(args.infolder_xtb).expanduser().resolve())
+    infile_gaussian_recalc = None if args.infile_gaussian_recalc is None else str(Path(args.infile_gaussian_recalc).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_gaussian.txt', 'w')
-    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, args.suffix, args.theory_level, args.option_opt, args.option_freq, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
+    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, infile_gaussian_recalc, args.suffix, args.theory_level, args.option_opt, args.option_freq, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
     print('Finish')
     sys.stdout.close()
     
