@@ -109,6 +109,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
         
         number = row.Index
         smiles = row.smiles
+        molid = row.molid
         confid = row.confid
         charge = row.charge
         multiplicity = row.multiplicity
@@ -124,6 +125,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
 
         if results_dict['is_success']:
             status_dict[number] = {'smiles': smiles,
+                                    'molid': molid,
                                     'confid': confid,
                                     'charge': charge,
                                     'multiplicity': multiplicity,
@@ -143,6 +145,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
                                     'LUMO_eV': results_dict['LUMO']}
         else:
             status_dict[number] = {'smiles': smiles,
+                                    'molid': molid,
                                     'confid': 0,
                                     'charge': charge,
                                     'multiplicity': multiplicity,
