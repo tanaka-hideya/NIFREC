@@ -12,7 +12,7 @@ Version: 1.1.1
 - Tomoyuki Miyao @ Nara Institute of Science and Technology (Contributor)
 
 ## Requirements
-- Python 3.12 or later
+- Python 3.13 or later
 - See `environment.yml` for the complete dependency list and version details
 - For the Gaussian step: a working installation of Gaussian 16. Either ensure `g16` is on your system `PATH`, or pass the full path to the Gaussian 16 executable via a CLI argument.
 
@@ -159,6 +159,7 @@ Notes
 - Unique identifiers: The index column specified by --idxcol must uniquely identify molecules; it is used in filenames and CSV indices.
 - Parallelism: Heavy steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1).
 - Output folders: Each step creates its output folder with the exact path you specify; if the folder already exists, creation may fail. Use a fresh path or remove the existing directory before rerunning.
+- Dots in paths: Avoid `.` in `--outfolder-rdkit` (and in the current directory for relative paths). Per-conformer XYZ export may split the output path at the first dot and write files to an unexpected location.
 
 ## Citation
 If you use NIFREC in your work, please cite it. See [CITATION.cff](https://github.com/tanaka-hideya/NIFREC/blob/main/CITATION.cff) in this repository.
