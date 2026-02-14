@@ -5,7 +5,7 @@
 #   pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
 
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=69,<81"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,7 +13,7 @@ name = "nifrec"
 version = "1.1.1"
 description = "NIFREC: an automated geometry optimization workflow for molecular ground states that incorporates an automated protocol for the elimination of imaginary frequencies (RDKit, xTB, Gaussian, and parsing)."
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.12"
+requires-python = ">=3.13,<3.14"
 license = { file = "LICENSE" }
 authors = [
   { name = "Hideya Tanaka" },
@@ -39,11 +39,11 @@ classifiers = [
 # Dependencies are derived from environment.yml. Some packages (e.g., RDKit, xTB)
 # are typically installed via conda; see optional-dependencies and notes below.
 dependencies = [
-  "numpy",
+  "numpy==2.4.*",
   "pandas==2.3.3",
   "cclib==1.8.1",
-  "joblib",
-  "periodictable",
+  "joblib==1.5.3",
+  "periodictable==1.7.1",
   "morfeus-ml==0.7.2"
 ]
 
@@ -51,7 +51,7 @@ dependencies = [
 # RDKit wheels are available on PyPI for some platforms but may lag releases.
 # Prefer conda-forge for RDKit if you encounter platform issues.
 chem = [
-  "rdkit>=2024.9.3"
+  "rdkit==2025.9.*"
 ]
 # xTB is a compiled codebase typically provided via conda (conda-forge::xtb)
 # or system package managers. It is intentionally not specified as a PyPI

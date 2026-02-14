@@ -2,12 +2,13 @@ name: nifrec
 channels:
 - conda-forge
 dependencies:
-- python >= 3.12
-- rdkit >= 2024.09.03
-- numpy
+- python=3.13.*
+- rdkit=2025.09.*
+- numpy=2.4.*
 - pandas=2.3.3
 - cclib=1.8.1
-- joblib
-- periodictable
+- joblib=1.5.3
+- periodictable=1.7.1
 - morfeus-ml=0.7.2
 - xtb=6.7.1
+- setuptools<81
