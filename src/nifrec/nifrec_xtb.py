@@ -31,7 +31,8 @@ def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd,
 
     def run_xtb_command(file_path, charge, namespace, fname):
         fp = str(Path(file_path).resolve().as_posix())
-        args = [xcmd, fp, '--ohess', '--chrg', str(charge), '--json']
+        xc = str(Path(xcmd).resolve().as_posix())
+        args = [xc, fp, '--ohess', '--chrg', str(charge), '--json']
         if namespace != '':
             args += ['--namespace', namespace]
         if option_xtb:
