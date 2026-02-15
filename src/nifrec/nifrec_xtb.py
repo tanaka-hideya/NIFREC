@@ -17,7 +17,6 @@ from joblib import cpu_count, delayed, Parallel
 import sys
 from pathlib import Path
 import shutil
-import shlex
 
 
 def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=50, imagfreq_thres=5.0, xcmd='xtb', option_xtb=None):
@@ -36,7 +35,7 @@ def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd,
         if namespace != '':
             args += ['--namespace', namespace]
         if option_xtb:
-            args += shlex.split(option_xtb)
+            args += option_xtb
         try:
             subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
@@ -311,8 +310,8 @@ def _parse_cli_args(argv=None):
                      )
     parser.add_argument('--option-xtb',
                      help=("Additional command-line arguments passed to xTB. "
-                           "Example: --option-xtb '--alpb water' (default: None)"),
-                     type=str,
+                           "Example: --option-xtb --alpb water (default: None)"),
+                     nargs=argparse.REMAINDER,
                      default=None,
                      )
     return parser.parse_args(argv)
