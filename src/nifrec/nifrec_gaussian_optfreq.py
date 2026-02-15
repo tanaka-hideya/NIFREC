@@ -90,9 +90,9 @@ def write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xy
 
 
 def run_gaussian(gname, gcmd):
-    command = f'{gcmd} {gname}.gjf'
+    args = [gcmd, f'{gname}.gjf']
     try:
-        subprocess.run(command, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
             print(f'{gname}, error during gaussian run: {e}')
             return False
