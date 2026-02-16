@@ -35,13 +35,13 @@ Explanation: --no-deps installs the nifrec package itself without pulling depend
 
 No PYTHONPATH setup is required. Command-line entry points are provided via [project.scripts].
 
-### Installing xTB as a standalone binary
+### Installing xTB binary
 
 Note: On macOS and Linux, xTB can be installed via conda, so the installation steps above are sufficient. If you want to use `nifrec-xtb` on Windows, follow the steps below. If you are using NIFREC without `nifrec-xtb` on Windows, the installation steps above are sufficient.
 
 1. After downloading `environment.yml` in the steps above, remove only the xTB (`xtb`) entry from the YAML file, and then proceed with the same installation steps.
 
-  Alternatively, without creating an environment from the YAML file, you can install all Python dependencies except xTB into an existing environment via pip:
+Alternatively, without creating an environment from the YAML file, you can install all Python dependencies except xTB into an existing environment via pip:
 
 ```bash
 pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
@@ -93,8 +93,6 @@ options:
   --force-field FORCE_FIELD
                         Force field to use for RDKit conformer generation (MMFF94s, MMFF94, or UFF). (default: MMFF94s)
 ```
-
-If any of the commands fail to run, try adjusting your setuptools version.
 
 ## Quick start with the sample dataset
 This section demonstrates the full pipeline in the current directory. Before starting, place the sample CSV file in the working directory:
