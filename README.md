@@ -12,9 +12,8 @@ Version: 1.1.1
 - Tomoyuki Miyao @ Nara Institute of Science and Technology (Contributor)
 
 ## Requirements
-- Python 3.13 or later
 - See `environment.yml` for the complete dependency list and version details
-- For the Gaussian step: a working installation of Gaussian 16. Either ensure `g16` is on your system `PATH`, or pass the full path to the Gaussian 16 executable via a CLI argument.
+- For the Gaussian step: a working installation of Gaussian 16. Either ensure `g16` is on your system `PATH`, or pass the full path to the Gaussian 16 executable via `nifrec-gaussian-optfreq`'s `--gcmd` argument.
 
 ## Installation
 
@@ -35,6 +34,20 @@ pip install "nifrec @ git+https://github.com/tanaka-hideya/NIFREC.git@main" --no
 Explanation: --no-deps installs the nifrec package itself without pulling dependencies from PyPI.
 
 No PYTHONPATH setup is required. Command-line entry points are provided via [project.scripts].
+
+### Installing xTB as a standalone binary
+
+Note: On macOS and Linux, xTB can be installed via conda, so the installation steps above are sufficient. If you want to use `nifrec-xtb` on Windows, follow the steps below. If you are using NIFREC without `nifrec-xtb` on Windows, the installation steps above are sufficient.
+
+1. After downloading `environment.yml` in the steps above, remove only the xTB (`xtb`) entry from the YAML file, and then proceed with the same installation steps.
+
+  Alternatively, without creating an environment from the YAML file, you can install all Python dependencies except xTB into an existing environment via pip:
+
+```bash
+pip install "nifrec[chem] @ git+https://github.com/tanaka-hideya/NIFREC.git@main"
+```
+
+2. Download the xTB binary from the official [xTB GitHub repository](https://github.com/grimme-lab/xtb/releases/tag/v6.7.1). If `xtb` is not on your system `PATH`, pass the full path to the xTB executable via `nifrec-xtb`'s `--xcmd` argument.
 
 ## Command-line tools
 Installed scripts (see [pyproject.toml](https://github.com/tanaka-hideya/NIFREC/blob/main/pyproject.toml)):
