@@ -12,7 +12,7 @@ authors:
     orcid: https://orcid.org/0000-0002-8769-2702
     affiliation: Nara Institute of Science and Technology
 title: NIFREC
-version: 1.1.1
+version: 1.2.0
 doi: 10.5281/zenodo.17299289
 repository-code: https://github.com/tanaka-hideya/NIFREC
 license: MIT
