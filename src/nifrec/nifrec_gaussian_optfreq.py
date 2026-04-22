@@ -96,7 +96,19 @@ def run_gaussian(gname, gcmd):
     except subprocess.CalledProcessError as e:
             print(f'{gname}, error during gaussian run: {e}')
             return False
-    return True
+        
+    lpath = f'{gname}.log'
+    opath = f'{gname}.out'
+
+    if os.path.exists(lpath):
+        return True
+
+    if os.path.exists(opath):
+        os.rename(opath, lpath)
+        return True
+
+    print(f'{gname}, neither {lpath} nor {opath} was found after gaussian run')
+    return False
 
 
 def move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname):
