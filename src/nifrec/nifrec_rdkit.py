@@ -15,6 +15,7 @@ from morfeus.conformer import ConformerEnsemble
 from rdkit import Chem
 import sys
 from pathlib import Path
+from nifrec import __version__
 
 
 def smiles_to_canonical(smi):
@@ -48,6 +49,7 @@ def process_rows_for_rdkit(outfd, file_path_input, file_path_output, n_confs, th
     print(f'backend: {backend}')
     print(f'random-seed: {random_seed}')
     print(f'force-field: {force_field}')
+    print(f'nifrec-version: {__version__}')
     print('------------------------------')
     
     original_df = pd.read_csv(file_path_input, index_col=idxcol)

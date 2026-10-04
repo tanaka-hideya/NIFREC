@@ -17,6 +17,7 @@ from joblib import cpu_count, delayed, Parallel
 import sys
 from pathlib import Path
 import shutil
+from nifrec import __version__
 
 
 def run_xtb_optimization_and_vibration_handle_imagfreq(file_path, charge, outfd, imagfreqoutfd, namespace=None, max_iterations=50, imagfreq_thres=5.0, xcmd='xtb', option_xtb=None):
@@ -130,6 +131,7 @@ def process_rows_for_xtb(outfd, infd, infile, file_path_output_all, file_path_ou
     print(f'backend: {backend}')
     print(f'xcmd: {xcmd}')
     print(f'option-xtb: {option_xtb}')
+    print(f'nifrec-version: {__version__}')
     print('------------------------------')
     
     file_path_input = f'{infd}/{infile}'

@@ -10,5 +10,7 @@ dependencies:
 - joblib=1.5.3
 - periodictable=1.7.1
 - morfeus-ml=0.7.2
+- ase=3.29.0
+- py-cpuinfo=9.0.0
 - xtb=6.7.1
 - setuptools<81

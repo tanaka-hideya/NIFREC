@@ -10,8 +10,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nifrec"
-version = "1.2.1"
-description = "NIFREC: an automated geometry optimization workflow for molecular ground states that incorporates an automated protocol for the elimination of imaginary frequencies (RDKit, xTB, Gaussian, and parsing)."
+version = "2.0.0"
+description = "NIFREC: an automated workflow for local-minimum molecular geometry optimization that incorporates an automated protocol for the elimination of imaginary frequencies (RDKit, xTB, Gaussian, and parsing)."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.13,<3.14"
 license = { file = "LICENSE" }
@@ -45,6 +45,8 @@ dependencies = [
   "joblib==1.5.3",
   "periodictable==1.7.1",
   "morfeus-ml==0.7.2",
+  "ase==3.29.0",
+  "py-cpuinfo==9.0.0",
   "setuptools<81"
 ]
 
@@ -53,6 +55,10 @@ dependencies = [
 # Prefer conda-forge for RDKit if you encounter platform issues.
 chem = [
   "rdkit==2025.9.*"
+]
+# Test dependencies (run the test suite with: python -m pytest)
+test = [
+  "pytest>=8"
 ]
 # xTB is a compiled codebase typically provided via conda (conda-forge::xtb)
 # or system package managers. It is intentionally not specified as a PyPI
@@ -76,3 +82,7 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["nifrec*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

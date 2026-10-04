@@ -12,15 +12,25 @@ Description:
     This code follows a simple design: it uses the .xyz file referenced by the
     input .csv file's filepath column for each calculation.  To use user-supplied
     .xyz files, create a .csv file and corresponding .xyz files in the same
-    format as the .csv produced by the xTB workflow.
+    format as the .csv produced by the xTB workflow.  Alternatively, with
+    --infolder-gjf, all Gaussian input files (.gjf or .com) in a folder are used;
+    the charge, multiplicity, and coordinates (Cartesian or Z-matrix) are then
+    read from each file with ASE, and the route section is built from the
+    command-line options.
 
     Its hallmark is a rigorous strategy for eliminating residual
     imaginary frequencies.  After an initial optimization and frequency
-    calculation, the program performs an RCFC re-optimization; if negative 
+    calculation, the program performs an RCFC re-optimization (which can be
+    skipped with --skip-stage1); if negative 
     modes persist, it constructs a normalized displacement vector from either 
     the most negative mode or the sum of all imaginary modes, applies 
-    successively larger scalar displacements, and repeats 'opt freq' 
+    successively larger scalar displacements to the same structure, and repeats 'opt freq' 
     cycle until every frequency is real or a user-defined iteration limit is reached.
+    The arbitrary sign of each imaginary-mode vector is fixed so that its
+    largest-magnitude Cartesian component is positive; --reverse-disp reverses
+    the resulting displacement vector.  A structure is accepted only if none of
+    its vibrational frequencies (parsed with cclib) is negative; no tolerance
+    threshold is applied.
 
     File management reflects the calculation outcome.  Conformers that
     converge without imaginary frequencies have their .gjf, .log, and
@@ -31,6 +41,55 @@ Description:
     attempts are made for that molecule; once all jobs have completed, the working 
     directory therefore contains only the failed cases, providing an immediate 
     target list for manual resubmission.
+
+    Output .csv file (gaussian_<suffix>_stats.csv).  One row is written per
+    molecule, and the file is updated after each molecule; empty cells denote
+    missing values.  Stage 0 is the initial 'opt freq' calculation, Stage 1 the
+    RCFC re-optimization, and Stage 2 the displacement trials k = 0, 1, ...,
+    max_repeat - 1, in which trial k displaces the structure of the preceding
+    stage by base_disp * (k + 1) angstrom along the normalized (unit-length)
+    displacement vector.  The final structure and the final energy of a
+    Gaussian job are the last ones in its .log file.
+      smiles, molid, total_energy_xTB: copied from the input .csv file
+        (total_energy_xTB: xTB total energy in hartree).  With --infolder-gjf,
+        smiles and total_energy_xTB are empty, and molid is the file name
+        without the extension.
+      confid: conformer ID from the input .csv file (1 with --infolder-gjf);
+        0 if no structure without imaginary frequencies was obtained.
+      charge, multiplicity: charge and spin multiplicity used in the Gaussian
+        jobs.
+      filepath: name of the .log file of the successful Gaussian job.
+      success_stage: stage (0, 1, or 2) at which a structure without
+        imaginary frequencies was obtained.
+      success_disploop: Stage 2 trial k (0-based) at which a structure
+        without imaginary frequencies was obtained; -1 if imaginary
+        frequencies remained after max_repeat trials.
+      fail_stage: stage (0, 1, or 2) at which a Gaussian job terminated
+        abnormally or its output could not be processed (empty otherwise).
+      n_imag_s0, n_imag_s1, n_imag_s2: number of imaginary (negative)
+        frequencies after Stage 0, Stage 1, and the last Stage 2 trial.
+      imag_freqs_s0_per_cm, imag_freqs_s1_per_cm, imag_freqs_s2_per_cm:
+        imaginary frequencies (cm^-1) after the same stages, in ascending
+        order and separated by ';' (empty if there are none).
+      rmsd_in_s0_angstrom: RMSD (angstrom) between the input structure and
+        the final structure of Stage 0.
+      rmsd_s0_s1_angstrom, rmsd_s0_s2_angstrom: RMSD (angstrom) between the
+        final structure of Stage 0 and that of Stage 1 or of the last Stage 2
+        trial.
+      dE_s0_s1_kJ_per_mol, dE_s0_s2_kJ_per_mol: final energy of Stage 1 or
+        of the last Stage 2 trial minus the final energy of Stage 0 (kJ/mol).
+      wall_time_seconds: elapsed (wall-clock) time in seconds for the
+        molecule, measured from the preparation of the Stage 0 input file to
+        the end of the processing of its last stage, including the Gaussian
+        jobs, the parsing of their .log files, and the file handling (also
+        recorded for molecules that failed).
+    The columns n_imag, imag_freqs, rmsd, and dE of a stage are filled only if
+    the Gaussian job of that stage (for Stage 2, the last trial) terminated
+    normally and its .log file was parsed; they are empty if the stage was not
+    run or failed.  RMSDs are calculated over all atoms (same atom order,
+    without mass weighting) after optimal superposition by translation and
+    rotation (ASE).  Energies are the final energies parsed by cclib (the SCF
+    energy, or the MP or CC energy if present).
 """
 
 import argparse
@@ -45,33 +104,84 @@ from periodictable import elements
 from joblib import cpu_count
 import sys
 from pathlib import Path
+import time
+import platform
+import traceback
+import cpuinfo
+import textwrap
+import ase.io
+from ase import Atoms
+from ase.build import minimize_rotation_and_translation
+from cclib.parser.utils import convertor
+from nifrec import __version__
+
+
+# Columns added to the output .csv file for each molecule (defined in the module docstring)
+INFO_COLUMNS = ['fail_stage',
+                'n_imag_s0', 'imag_freqs_s0_per_cm', 'n_imag_s1', 'imag_freqs_s1_per_cm', 'n_imag_s2', 'imag_freqs_s2_per_cm',
+                'rmsd_in_s0_angstrom', 'rmsd_s0_s1_angstrom', 'dE_s0_s1_kJ_per_mol', 'rmsd_s0_s2_angstrom', 'dE_s0_s2_kJ_per_mol',
+                'wall_time_seconds']
+STAGE2_COLUMNS = ['n_imag_s2', 'imag_freqs_s2_per_cm', 'rmsd_s0_s2_angstrom', 'dE_s0_s2_kJ_per_mol']
 
 
 def parse_freq_and_disp(logpath):
     data = cclib.io.ccread(logpath)
-    return data.vibfreqs, data.vibdisps
+    return data.vibfreqs, data.vibdisps, data.atomcoords[-1], final_energy(data)
+
+
+def final_energy(data):
+    # Final energy (eV) at the highest level parsed by cclib: coupled cluster > Moller-Plesset > SCF
+    for attr in ('ccenergies', 'mpenergies', 'scfenergies'):
+        if hasattr(data, attr):
+            return np.ravel(getattr(data, attr)[-1])[-1]
 
 
 def detect_imag(freqs):
     return any(f < 0 for f in freqs)
 
 
-def combined_imag_vector(freqs, disps, imag_vec_sum):
+def summarize_imag(freqs):
+    # Number of imaginary frequencies and their values (ascending, separated by ';')
+    imag = np.sort(freqs[freqs < 0])
+    return len(imag), ';'.join(f'{f:.4f}' for f in imag)
+
+
+def canonicalize_sign(vec):
+    # Fix the arbitrary sign of a normal-mode vector: its largest-magnitude Cartesian component is made
+    # positive (the first one in atom order is used if several components share the largest magnitude).
+    return -vec if vec.flat[np.argmax(np.abs(vec))] < 0 else vec
+
+
+def combined_imag_vector(freqs, disps, disp_vec, reverse_disp):
     idx = [i for i, f in enumerate(freqs) if f < 0]
-    if imag_vec_sum:
-        vec = disps[idx].sum(axis=0)
+    if disp_vec == 'sum':
+        vec = sum(canonicalize_sign(disps[i]) for i in idx)
     else:
         idx = min(idx, key=lambda k: freqs[k])
-        vec = disps[idx]
+        vec = canonicalize_sign(disps[idx])
     norm = np.linalg.norm(vec)
-    return vec / norm if norm > 1e-12 else vec
+    vec = vec / norm if norm > 1e-12 else vec
+    return -vec if reverse_disp else vec
 
 
 def displaced_coords(coords, vec, disp):
     return coords + vec * disp
 
 
-def write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data, oldchkpath=''):
+def rmsd_aligned(coords_ref, coords):
+    # RMSD over all atoms (same atom order) after optimal superposition (translation and rotation) with ASE
+    atoms_ref = Atoms(positions=coords_ref)
+    atoms = Atoms(positions=coords)
+    minimize_rotation_and_translation(atoms_ref, atoms)
+    return round(float(np.sqrt(np.mean(np.sum((atoms.positions - atoms_ref.positions) ** 2, axis=1)))), 6)
+
+
+def energy_diff_kj_per_mol(energy, energy_ref):
+    # Energy difference (eV, cclib units) converted to kJ/mol with cclib
+    return round(float(convertor(energy - energy_ref, 'eV', 'kJ/mol')), 6)
+
+
+def write_gjf(njobs, mem, gname, route_section, title, charge, multiplicity, xyz_data, oldchkpath=''):
     gjfpath = f'{gname}.gjf'
     with open(gjfpath, 'w') as f:
         f.write(f'%nprocshared={njobs}\n')
@@ -80,8 +190,8 @@ def write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xy
             f.write(f'%oldchk={oldchkpath}\n')
         f.write(f'%chk={gname}.chk\n')
         f.write(f'{route_section}\n\n')
-        if smiles:
-            f.write(f'smiles: {smiles}\n\n')
+        if title:
+            f.write(f'{title}\n\n')
         if charge != '' and multiplicity != '':
             f.write(f'{charge} {multiplicity}\n')
         if xyz_data:
@@ -143,9 +253,16 @@ def move_imag_dir(imagfoutfd, gname, suffix):
     return True, logfilepath, chkfilepath
 
 
-def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, option_opt, option_opt_fc, option_freq, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd):
+def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, option_opt, option_opt_fc, option_freq, charge, multiplicity, mem, njobs, base_disp, max_repeat, disp_vec, reverse_disp, skip_stage1, gcmd, info, atoms_gjf=None):
+    # info: dict of INFO_COLUMNS filled in place; info['fail_stage'] holds the stage being processed.
+    # atoms_gjf: ASE Atoms read from a Gaussian input file (--infolder-gjf); None for .xyz files from the xTB workflow.
 
-    gname = filepath.replace('xTB', 'g').replace('.xyz', '')
+    if atoms_gjf is None:
+        gname = filepath.replace('xTB', 'g').replace('.xyz', '')
+        title = f'smiles: {smiles}'
+    else:
+        gname = f'g_{Path(filepath).stem}'
+        title = f'input: {filepath}'
     logpath = f'{gname}.log'
 
     def read_xyz(file_path):
@@ -154,10 +271,15 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
         xyz_data = ''.join(lines[2:])
         return xyz_data
     
-    xtbpath = f'{xtbxyzfd}/{filepath}'
-    xyz_data = read_xyz(xtbpath)
+    if atoms_gjf is None:
+        xtbpath = f'{xtbxyzfd}/{filepath}'
+        xyz_data = read_xyz(xtbpath)
+    else:
+        xyz_data = ''.join(f'{sym} {x:.6f} {y:.6f} {z:.6f}\n' for sym, (x, y, z) in zip(atoms_gjf.get_chemical_symbols(), atoms_gjf.positions))
+    coords_in = np.array([line.split()[1:4] for line in xyz_data.splitlines() if line.strip()], dtype=float)
     
     # ---------- Stage 0 ---------------------------------------------------
+    info['fail_stage'] = 0
     if option_opt and option_opt_fc:
         route_section = f'#p {level_of_theory} opt=({option_opt_fc},{option_opt}) freq{option_freq}'
     elif option_opt:
@@ -166,53 +288,65 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
         route_section = f'#p {level_of_theory} opt=({option_opt_fc}) freq{option_freq}'
     else:
         route_section = f'#p {level_of_theory} opt freq{option_freq}'        
-    write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data)
+    write_gjf(njobs, mem, gname, route_section, title, charge, multiplicity, xyz_data)
     
     flag_rg = run_gaussian(gname, gcmd)
     if not flag_rg:
         return None, False, None, None
         
-    freqs_0, _ = parse_freq_and_disp(logpath)
+    freqs_0, disps_0, coords_0, energy_0 = parse_freq_and_disp(logpath)
+    info['n_imag_s0'], info['imag_freqs_s0_per_cm'] = summarize_imag(freqs_0)
+    info['rmsd_in_s0_angstrom'] = rmsd_aligned(coords_in, coords_0)
     if not detect_imag(freqs_0):
         flag_msd = move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname)
         if not flag_msd:
             return None, False, None, None
         return logpath, True, 0, None
     
-    flag_mid, _, chkfilepath_0 = move_imag_dir(imagfoutfd, gname, '0')
+    flag_mid, logfilepath_0, chkfilepath_0 = move_imag_dir(imagfoutfd, gname, '0')
     if not flag_mid:
         return None, False, None, None
+    logfilepath_base, freqs_base, disps_base = logfilepath_0, freqs_0, disps_0
     
     # ---------- Stage 1 (RCFC) -------------------------------------------
-    if option_opt:
-        route_section_rcfc = f'#p {level_of_theory} opt=(RCFC,{option_opt}) freq{option_freq} Guess=Read Geom=AllCheck'
-    else:
-        route_section_rcfc = f'#p {level_of_theory} opt=RCFC freq{option_freq} Guess=Read Geom=AllCheck'
-    write_gjf(njobs, mem, gname, route_section_rcfc, '', '', '', '', chkfilepath_0)
+    if not skip_stage1:
+        info['fail_stage'] = 1
+        if option_opt:
+            route_section_rcfc = f'#p {level_of_theory} opt=(RCFC,{option_opt}) freq{option_freq} Guess=Read Geom=AllCheck'
+        else:
+            route_section_rcfc = f'#p {level_of_theory} opt=RCFC freq{option_freq} Guess=Read Geom=AllCheck'
+        write_gjf(njobs, mem, gname, route_section_rcfc, '', '', '', '', chkfilepath_0)
     
-    flag_rg = run_gaussian(gname, gcmd)
-    if not flag_rg:
-        return None, False, None, None
-        
-    freqs_1, disps_1 = parse_freq_and_disp(logpath)
-    if not detect_imag(freqs_1):
-        flag_msd = move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname)
-        if not flag_msd:
+        flag_rg = run_gaussian(gname, gcmd)
+        if not flag_rg:
             return None, False, None, None
-        return logpath, True, 1, None
+        
+        freqs_1, disps_1, coords_1, energy_1 = parse_freq_and_disp(logpath)
+        info['n_imag_s1'], info['imag_freqs_s1_per_cm'] = summarize_imag(freqs_1)
+        info['rmsd_s0_s1_angstrom'] = rmsd_aligned(coords_0, coords_1)
+        info['dE_s0_s1_kJ_per_mol'] = energy_diff_kj_per_mol(energy_1, energy_0)
+        if not detect_imag(freqs_1):
+            flag_msd = move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname)
+            if not flag_msd:
+                return None, False, None, None
+            return logpath, True, 1, None
     
-    flag_mid, logfilepath_1, _ = move_imag_dir(imagfoutfd, gname, '1')
-    if not flag_mid:
-        return None, False, None, None
+        flag_mid, logfilepath_1, _ = move_imag_dir(imagfoutfd, gname, '1')
+        if not flag_mid:
+            return None, False, None, None
+        logfilepath_base, freqs_base, disps_base = logfilepath_1, freqs_1, disps_1
     
     # ---------- Stage 2 (displacement loop) ------------------------------
-    data_imagf = cclib.io.ccread(logfilepath_1)
+    # Every trial starts from the structure of the preceding stage (Stage 1, or Stage 0 with --skip-stage1).
+    info['fail_stage'] = 2
+    data_imagf = cclib.io.ccread(logfilepath_base)
     coords_imagf = data_imagf.atomcoords[-1]
     atomnos_imagf = data_imagf.atomnos
     symbols_imagf = [elements[Z].symbol for Z in atomnos_imagf]
 
-    vec = combined_imag_vector(freqs_1, disps_1, imag_vec_sum)
+    vec = combined_imag_vector(freqs_base, disps_base, disp_vec, reverse_disp)
     for i in range(max_repeat):
+        info.update(dict.fromkeys(STAGE2_COLUMNS))  # the Stage 2 columns describe the last trial
         disp = base_disp * (i + 1)
         coords = displaced_coords(coords_imagf, vec, disp)
         xyz_data_i = '\n'.join(
@@ -220,13 +354,16 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
             for sym, (x, y, z) in zip(symbols_imagf, coords)
         ) + '\n'
 
-        write_gjf(njobs, mem, gname, route_section, smiles, charge, multiplicity, xyz_data_i)
+        write_gjf(njobs, mem, gname, route_section, title, charge, multiplicity, xyz_data_i)
         
         flag_rg = run_gaussian(gname, gcmd)
         if not flag_rg:
             return None, False, None, None
             
-        freqs_2, _ = parse_freq_and_disp(logpath)
+        freqs_2, _, coords_2, energy_2 = parse_freq_and_disp(logpath)
+        info['n_imag_s2'], info['imag_freqs_s2_per_cm'] = summarize_imag(freqs_2)
+        info['rmsd_s0_s2_angstrom'] = rmsd_aligned(coords_0, coords_2)
+        info['dE_s0_s2_kJ_per_mol'] = energy_diff_kj_per_mol(energy_2, energy_0)
         if not detect_imag(freqs_2):
             flag_msd = move_success_dir(gjfoutfd, logoutfd, chkoutfd, gname)
             if not flag_msd:
@@ -239,13 +376,14 @@ def run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbx
     return None, False, None, -1
 
 
-def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_recalc, keyword, level_of_theory, option_opt, option_opt_fc, option_freq, mem, njobs, base_disp=0.1, max_repeat=5, imag_vec_sum=True, gcmd='g16'):
+def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_recalc, keyword, level_of_theory, option_opt, option_opt_fc, option_freq, mem, njobs, base_disp=0.1, max_repeat=5, disp_vec='sum', reverse_disp=False, skip_stage1=False, gcmd='g16', infd_gjf=None):
     print(f'Gaussian calculation (opt freq)')
     print('========== Settings ==========')
     print(f'outfolder-gaussian: {outfd}')
     print(f'infolder-xtb: {infd}')
     print(f'infolder-xtb-xyz: {infd_xyz}')
     print(f'infile: {infile}')
+    print(f'infolder-gjf: {infd_gjf}')
     print(f'infile-gaussian-recalc: {infile_gaussian_recalc}')
     print(f'suffix: {keyword}')
     print(f'theory-level: {level_of_theory}')
@@ -256,8 +394,15 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
     print(f'mem: {mem}')
     print(f'base-disp: {base_disp}')
     print(f'max-repeat: {max_repeat}')
-    print(f'imag-vec: {imag_vec_sum}')
+    print(f'disp-vec: {disp_vec}')
+    print(f'reverse-disp: {reverse_disp}')
+    print(f'skip-stage1: {skip_stage1}')
     print(f'gcmd: {gcmd}')
+    print(f'nifrec-version: {__version__}')
+    print(f'hostname: {platform.node()}')
+    print(f'platform: {platform.platform()}')
+    print(f"cpu: {cpuinfo.get_cpu_info().get('brand_raw', 'unknown')}")
+    print(f'cpu-count: {os.cpu_count()}')
     print('------------------------------')
     
     file_path_input = f'{infd}/{infile}'
@@ -275,23 +420,48 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
     pwd_prev = os.getcwd()
     os.chdir(outputoutfd) # Output files are stored in outputoutfd
         
-    df = pd.read_csv(file_path_input, index_col=0)
-    print(f'All molecules in the dataset {len(df)}')
-    df = df[df['confid'] != 0]
-    print(f'All molecules successfully processed by xTB opt and freq calculations {len(df)}')
+    gjf_atoms = dict()
+    if infd_gjf:
+        # Gaussian input files: the charge, multiplicity, and coordinates are read with ASE.
+        gjf_rows = dict()
+        for path in sorted(Path(infd_gjf).iterdir()):
+            if path.suffix.lower() not in ('.gjf', '.com'):
+                continue
+            if path.stem in gjf_atoms or any(c.isspace() for c in path.stem):
+                raise ValueError(f'File names (without the extension) must be unique and must not contain whitespace: {path.name}')
+            try:
+                atoms = ase.io.read(path, format='gaussian-in', attach_calculator=True)
+            except Exception as e:
+                raise ValueError(f'{path.name} could not be read: {e}') from e
+            params = atoms.calc.parameters
+            if params.get('units') in ('bohr', 'au'):
+                raise ValueError(f'{path.name}: only coordinates in angstrom are supported')
+            gjf_atoms[path.stem] = atoms
+            gjf_rows[path.stem] = {'smiles': None, 'molid': path.stem, 'confid': 1, 'total_energy_xTB': None,
+                                   'filepath': path.name, 'formal_charge': params['charge'], 'multiplicity': params['mult']}
+        if not gjf_rows:
+            raise ValueError(f'No .gjf or .com files were found in {infd_gjf}')
+        df = pd.DataFrame.from_dict(gjf_rows, orient='index')
+        print(f'All Gaussian input files {len(df)}')
+    else:
+        df = pd.read_csv(file_path_input, index_col=0)
+        print(f'All molecules in the dataset {len(df)}')
+        df = df[df['confid'] != 0]
+        print(f'All molecules successfully processed by xTB opt and freq calculations {len(df)}')
     
     if infile_gaussian_recalc:
-        df_gaussian_recalc = pd.read_csv(infile_gaussian_recalc, index_col=0)
-        failed_idx = df_gaussian_recalc[df_gaussian_recalc['confid'] == 0].index
-        df = df.loc[failed_idx]
+        df_gaussian_recalc = pd.read_csv(infile_gaussian_recalc, index_col=0, dtype=str)
+        failed_idx = df_gaussian_recalc[df_gaussian_recalc['confid'] == '0'].index
+        df = df[df.index.astype(str).isin(failed_idx)]
         print(f'All molecules selected for Gaussian recalculation (confid = 0) {len(df)}')
 
-    smicol = 'smiles'
-    molcol = 'romol'
-    df[molcol] = df[smicol].apply(Chem.MolFromSmiles)
-    df.dropna(subset=molcol, inplace=True) # Drop fail molecules by RDKit
-    df['formal_charge'] = df[molcol].apply(Chem.GetFormalCharge)
-    df['multiplicity'] = df[molcol].apply(lambda mol: Descriptors.NumRadicalElectrons(mol) + 1)
+    if not infd_gjf:
+        smicol = 'smiles'
+        molcol = 'romol'
+        df[molcol] = df[smicol].apply(Chem.MolFromSmiles)
+        df.dropna(subset=molcol, inplace=True) # Drop fail molecules by RDKit
+        df['formal_charge'] = df[molcol].apply(Chem.GetFormalCharge)
+        df['multiplicity'] = df[molcol].apply(lambda mol: Descriptors.NumRadicalElectrons(mol) + 1)
 
     # Parallel calculation setting
     njobs = cpu_count() -1 if njobs < 1 else njobs
@@ -312,7 +482,17 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
         with open(f'{outfd}/log_gaussian_worker_{keyword}.txt', 'w') as f:
             print(f'Processing {worker_id+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
             
-        logpath, is_success, success_stage, success_disploop = run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, option_opt, option_opt_fc, option_freq, charge, multiplicity, mem, njobs, base_disp, max_repeat, imag_vec_sum, gcmd)
+        info = dict.fromkeys(INFO_COLUMNS)
+        time_start = time.perf_counter()
+        try:
+            logpath, is_success, success_stage, success_disploop = run_goptfreq_pipeline(smiles, gjfoutfd, logoutfd, chkoutfd, imagfoutfd, xtbxyzfd, filepath, level_of_theory, option_opt, option_opt_fc, option_freq, charge, multiplicity, mem, njobs, base_disp, max_repeat, disp_vec, reverse_disp, skip_stage1, gcmd, info, gjf_atoms.get(number))
+        except Exception:
+            # e.g., a log file that cannot be parsed: the molecule is recorded as failed at info['fail_stage']
+            print(f'number {number}, error at stage {info["fail_stage"]}:\n{traceback.format_exc()}')
+            logpath, is_success, success_stage, success_disploop = None, False, None, None
+        info['wall_time_seconds'] = round(time.perf_counter() - time_start, 2)
+        if is_success or success_disploop == -1:
+            info['fail_stage'] = None
 
         if is_success:
             status_dict[number] = {'smiles': smiles,
@@ -323,7 +503,8 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
                                     'total_energy_xTB': energy_xtb,
                                     'filepath': logpath,
                                     'success_stage': success_stage,
-                                    'success_disploop': success_disploop}
+                                    'success_disploop': success_disploop,
+                                    **info}
         else:
             status_dict[number] = {'smiles': smiles,
                                     'molid': molid,
@@ -333,16 +514,19 @@ def process_rows_for_goptfreq(outfd, infd, infd_xyz, infile, infile_gaussian_rec
                                     'total_energy_xTB': energy_xtb,
                                     'filepath': logpath,
                                     'success_stage': success_stage,
-                                    'success_disploop': success_disploop}
+                                    'success_disploop': success_disploop,
+                                    **info}
         
         status_df = pd.DataFrame.from_dict(status_dict, orient='index')
         status_df['success_stage'] = status_df['success_stage'].astype('Int64')
         status_df['success_disploop'] = status_df['success_disploop'].astype('Int64')
+        for col in ('fail_stage', 'n_imag_s0', 'n_imag_s1', 'n_imag_s2'):
+            status_df[col] = status_df[col].astype('Int64')
         status_df.to_csv(file_path_output)
         
     status_df = status_df[status_df['confid'] != 0]
     print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) {len(status_df)}")
-    print('confid = 0 means the Gaussian job terminated abnormally or that imaginary frequencies could not be removed.')
+    print('confid = 0 means the Gaussian job terminated abnormally (see fail_stage) or that imaginary frequencies could not be removed.')
         
     os.chdir(pwd_prev) # Set back the previous folder
 
@@ -351,42 +535,29 @@ def _parse_cli_args(argv=None):
 
     parser = argparse.ArgumentParser(
                         prog='nifrec_gaussian_optfreq',
-            description=("This script performs Gaussian 'opt freq' calculations using any " 
-                        "Gaussian-compatible method—such as HF, DFT, or MP2—while continuously " 
-                        "monitoring the vibrational frequency output.  Although it is designed " 
-                        "to import the lowest-energy structures generated by an upstream xTB " 
-                        "workflow, any user-supplied .xyz file can be treated in the same way. "
-                        "This code follows a simple design: it uses the .xyz file referenced by the "
-                        "input .csv file's filepath column for each calculation.  To use user-supplied "
-                        ".xyz files, create a .csv file and corresponding .xyz files in the same "
-                        "format as the .csv produced by the xTB workflow. "
-                        "Its hallmark is a rigorous strategy for eliminating residual "
-                        "imaginary frequencies.  After an initial optimization and frequency "
-                        "calculation, the program performs an RCFC re-optimization; if negative " 
-                        "modes persist, it constructs a normalized displacement vector from either " 
-                        "the most negative mode or the sum of all imaginary modes, applies " 
-                        "successively larger scalar displacements, and repeats 'opt freq' " 
-                        "cycle until every frequency is real or a user-defined iteration limit is reached. "
-                        "File management reflects the calculation outcome.  Conformers that "
-                        "converge without imaginary frequencies have their .gjf, .log, and "
-                        ".chk files moved to dedicated success directories.  Conformers that "
-                        "retain imaginary frequencies are renamed with a descriptive suffix "
-                        "and collected in the 'imagf' directory.  If a Gaussian job terminates " 
-                        "abnormally, its files remain in the working directory and no further " 
-                        "attempts are made for that molecule; once all jobs have completed, the working " 
-                        "directory therefore contains only the failed cases, providing an immediate " 
-                        "target list for manual resubmission."),
+                        # Same text as the 'Description:' section of the module docstring
+                        description=textwrap.dedent((__doc__ or '').split('Description:', 1)[-1]).strip(),
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument('--outfolder-gaussian',
                      help="Output folder to write gaussian results (.gjf, .log, and .chk files, other logs). Accepts absolute or relative paths; '~' is expanded. The folder is created.",
                      type=str,
                      required=True,
                      )
-    parser.add_argument('--infolder-xtb',
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument('--infolder-xtb',
                 help=("Input folder for loading xTB results (.xyz files). Accepts absolute or relative paths; '~' is expanded. "
-                    "Generates .gjf files by referencing the specified --infolder-xtb-xyz directory (default: xtbopt_emin_xyz) located inside the specified --infolder-xtb directory."),
+                    "Generates .gjf files by referencing the specified --infolder-xtb-xyz directory (default: xtbopt_emin_xyz) located inside the specified --infolder-xtb directory. "
+                    "The charge and multiplicity are derived from the SMILES with RDKit (multiplicity = number of radical electrons + 1). "
+                    "Exactly one of --infolder-xtb and --infolder-gjf must be given."),
                      type=str,
-                     required=True,
+                     )
+    input_group.add_argument('--infolder-gjf',
+                help=("Input folder containing Gaussian input files (.gjf or .com), used instead of --infolder-xtb. "
+                    "All such files are processed in order of file name, and the file name without the extension is used as the molecule identifier. "
+                    "The charge, multiplicity, and coordinates (Cartesian or Z-matrix) are read from each file with ASE; the route section of the file is not used. "
+                    "--infolder-xtb-xyz and --infile are ignored. Accepts absolute or relative paths; '~' is expanded."),
+                     type=str,
                      )
     parser.add_argument('--infolder-xtb-xyz',
                 help=("Generates .gjf files by referencing the specified --infolder-xtb-xyz directory. (default: xtbopt_emin_xyz) "
@@ -403,7 +574,7 @@ def _parse_cli_args(argv=None):
     parser.add_argument('--infile-gaussian-recalc',
                 help=("Path to a previously generated Gaussian stats .csv file (e.g., gaussian_<suffix>_stats.csv) from a prior run of this script. "
                     "If provided, only molecules with confid = 0 in that .csv file are recalculated. "
-                    "Use the same --infolder-xtb, --infolder-xtb-xyz, and --infile as the previous run, and specify a different --outfolder-gaussian. "
+                    "Use the same --infolder-xtb, --infolder-xtb-xyz, and --infile (or --infolder-gjf) as the previous run, and specify a different --outfolder-gaussian. "
                     "Accepts absolute or relative paths; '~' is expanded. (default: None)"),
                      type=str,
                      default=None,
@@ -453,9 +624,9 @@ def _parse_cli_args(argv=None):
                      )
     parser.add_argument('--base-disp',
                 help=("Initial scalar displacement (in Å) applied to the "
-                    "normalized combined imaginary-mode vector to generate the first "
+                    "normalized imaginary-mode vector (see --disp-vec) to generate the first "
                     "perturbed geometry.  Subsequent iterations use integer multiples "
-                    "of this value (2 * base_disp, 3 * base_disp, …).  Typical choices "
+                    "of this value (2 * base_disp, 3 * base_disp, …), always starting from the same structure.  Typical choices "
                     "are 0.05-0.20 Å: smaller values may leave the structure in the "
                     "saddle region, whereas excessively large values risk overshooting "
                     "the nearest minimum and destabilizing the optimization. (default: 0.1)"),
@@ -470,14 +641,24 @@ def _parse_cli_args(argv=None):
                      type=int,
                      default=5,
                      )
-    parser.add_argument('--imag-vec',
-                help=("Boolean switch that selects how the displacement vector for "
-                    "imaginary-frequency nudging is built. "
-                    "'sum' strategy (default): component-wise sum of all "
-                    "imaginary-mode Cartesian displacement vectors, followed by L2 normalization.  "
-                    "'largest' strategy (effective only with --imag-vec): use only the displacement vector "
-                    "of the single most negative imaginary frequency, then normalize."),
-                     action='store_false',
+    parser.add_argument('--disp-vec',
+                help=("Selects how the displacement vector for imaginary-frequency nudging is built. "
+                    "The sign of each imaginary-mode vector is first fixed so that its largest-magnitude Cartesian component is positive. "
+                    "'sum' (default): component-wise sum of the sign-fixed Cartesian displacement vectors of all imaginary modes, "
+                    "followed by L2 normalization. "
+                    "'largest': the sign-fixed displacement vector of the single most negative imaginary frequency, then normalize. "
+                    "Both are identical when only one imaginary frequency is present. (default: sum)"),
+                     type=str,
+                     choices=['sum', 'largest'],
+                     default='sum',
+                     )
+    parser.add_argument('--reverse-disp',
+                help="Reverse the displacement vector (multiply it by -1), i.e., displace in the direction opposite to the default sign convention.",
+                     action='store_true',
+                     )
+    parser.add_argument('--skip-stage1',
+                help="Skip Stage 1 (RCFC re-optimization): Stage 2 starts directly from the Stage 0 structure and its imaginary modes.",
+                     action='store_true',
                      )
     parser.add_argument('--gcmd',
                      help="Command to the Gaussian executable. 'gcmd gname.gjf' (default: g16)",
@@ -490,11 +671,12 @@ def _parse_cli_args(argv=None):
 def main(argv=None):
     args = _parse_cli_args(argv)
     outfd = str(Path(args.outfolder_gaussian).expanduser().resolve())
-    infd = str(Path(args.infolder_xtb).expanduser().resolve())
+    infd = None if args.infolder_xtb is None else str(Path(args.infolder_xtb).expanduser().resolve())
+    infd_gjf = None if args.infolder_gjf is None else str(Path(args.infolder_gjf).expanduser().resolve())
     infile_gaussian_recalc = None if args.infile_gaussian_recalc is None else str(Path(args.infile_gaussian_recalc).expanduser().resolve())
     os.makedirs(outfd)
     sys.stdout = open(f'{outfd}/log_gaussian.txt', 'w')
-    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, infile_gaussian_recalc, args.suffix, args.theory_level, args.option_opt, args.option_opt_fc, args.option_freq, args.mem, args.nproc, args.base_disp, args.max_repeat, args.imag_vec, args.gcmd)
+    process_rows_for_goptfreq(outfd, infd, args.infolder_xtb_xyz, args.infile, infile_gaussian_recalc, args.suffix, args.theory_level, args.option_opt, args.option_opt_fc, args.option_freq, args.mem, args.nproc, args.base_disp, args.max_repeat, args.disp_vec, args.reverse_disp, args.skip_stage1, args.gcmd, infd_gjf)
     print('Finish')
     sys.stdout.close()
     

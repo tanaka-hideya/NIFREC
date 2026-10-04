@@ -12,8 +12,14 @@ import pandas as pd
 import sys
 import cclib
 from pathlib import Path
+from cclib.parser.utils import convertor
+from nifrec import __version__
 
-EV_PER_HARTREE = 27.211386245988  
+# Integer columns of the input .csv file (kept as integers in the output .csv file)
+INT_COLUMNS = ['confid', 'charge', 'multiplicity', 'success_stage', 'success_disploop', 'fail_stage',
+               'n_imag_s0', 'n_imag_s1', 'n_imag_s2']
+# Columns holding imaginary frequencies separated by ';' (read as text)
+TEXT_COLUMNS = ['imag_freqs_s0_per_cm', 'imag_freqs_s1_per_cm', 'imag_freqs_s2_per_cm']
 
 
 def gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo):  
@@ -54,7 +60,7 @@ def gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo):
         if data.metadata['success'] and data.optdone:
             results['is_success'] = True
 
-        results['E_scf_final'] = data.scfenergies[-1] / EV_PER_HARTREE
+        results['E_scf_final'] = convertor(data.scfenergies[-1], 'eV', 'hartree') # cclib stores energies in eV
         results['zpve'] = data.zpve
         results['Ezero'] = results['E_scf_final'] + results['zpve']
         results['H'] = data.enthalpy
@@ -88,6 +94,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
     print(f'infile: {infile}')
     print(f'outfile: {outfile}')
     print(f'no-homo-lumo: {no_homo_lumo}')
+    print(f'nifrec-version: {__version__}')
     print('------------------------------')
     
     # Safety check: prevent accidental overwrite when input and output filenames are identical.
@@ -98,7 +105,8 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
     file_path_input = f'{infd}/{infile}'
     file_path_output = f'{infd}/{outfile}'
             
-    df = pd.read_csv(file_path_input, index_col=0)
+    header = pd.read_csv(file_path_input, nrows=0).columns
+    df = pd.read_csv(file_path_input, index_col=0, dtype={col: str for col in TEXT_COLUMNS if col in header})
     print(f'All molecules in the dataset {len(df)}')
     df = df[df['confid'] != 0]
     print(f"All molecules successfully processed by Gaussian 'opt freq' calculations (no imaginary frequencies) {len(df)}")
@@ -109,30 +117,16 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
         
         number = row.Index
         smiles = row.smiles
-        molid = row.molid
-        confid = row.confid
-        charge = row.charge
-        multiplicity = row.multiplicity
-        energy_xtb = row.total_energy_xTB
         filepath  = row.filepath
-        success_stage = row.success_stage
-        success_disploop = row.success_disploop
         
         with open(f'{infd}/log_gaussian_worker_parse.txt', 'w') as f:
             print(f'Processing {cumnum+1}/{ntotal}, number {number}, smiles {smiles}', file=f)
             
         results_dict = gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo)
 
+        # All columns of the input .csv file are carried over
         if results_dict['is_success']:
-            status_dict[number] = {'smiles': smiles,
-                                    'molid': molid,
-                                    'confid': confid,
-                                    'charge': charge,
-                                    'multiplicity': multiplicity,
-                                    'total_energy_xTB': energy_xtb,
-                                    'filepath': filepath,
-                                    'success_stage': success_stage,
-                                    'success_disploop': success_disploop,
+            status_dict[number] = {**df.loc[number].to_dict(),
                                     'functional': results_dict['functional'],
                                     'basis_set': results_dict['basis_set'],
                                     'Final_SCF_Energy_hartree': results_dict['E_scf_final'],
@@ -144,15 +138,8 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
                                     'HOMO_eV': results_dict['HOMO'],
                                     'LUMO_eV': results_dict['LUMO']}
         else:
-            status_dict[number] = {'smiles': smiles,
-                                    'molid': molid,
+            status_dict[number] = {**df.loc[number].to_dict(),
                                     'confid': 0,
-                                    'charge': charge,
-                                    'multiplicity': multiplicity,
-                                    'total_energy_xTB': energy_xtb,
-                                    'filepath': filepath,
-                                    'success_stage': success_stage,
-                                    'success_disploop': success_disploop,
                                     'functional': results_dict['functional'],
                                     'basis_set': results_dict['basis_set'],
                                     'Final_SCF_Energy_hartree': results_dict['E_scf_final'],
@@ -165,6 +152,9 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
                                     'LUMO_eV': results_dict['LUMO']}
             
         status_df = pd.DataFrame.from_dict(status_dict, orient='index')
+        for col in INT_COLUMNS:
+            if col in status_df.columns:
+                status_df[col] = status_df[col].astype('Int64')
         status_df.to_csv(file_path_output)
         
     status_df = status_df[status_df['confid'] != 0]
