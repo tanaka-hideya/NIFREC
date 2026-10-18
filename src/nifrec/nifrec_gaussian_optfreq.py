@@ -19,9 +19,9 @@ Description:
 
     Its hallmark is a rigorous strategy for eliminating residual
     imaginary frequencies.  After an initial optimization and frequency
-    calculation, the program performs an RCFC re-optimization (which can be
-    skipped with --skip-stage1); if negative 
-    modes persist, it constructs a normalized displacement vector from either 
+    calculation, the program performs an RCFC re-optimization 
+    (which can be skipped with --skip-stage1); 
+    if negative modes persist, it constructs a normalized displacement vector from either 
     the most negative mode or the sum of all imaginary modes, applies 
     successively larger scalar displacements to the same structure, and repeats 'opt freq' 
     cycle until every frequency is real or a user-defined iteration limit is reached.
@@ -29,10 +29,9 @@ Description:
     largest-magnitude Cartesian component is positive; --reverse-disp reverses
     the resulting displacement vector.  A structure is accepted only if none of
     its vibrational frequencies (parsed with cclib) is negative; no tolerance
-    threshold is applied.  (This strict criterion is adopted for complete
-    automation: deciding case by case whether a small imaginary frequency is
-    acceptable would require manual inspection, whereas no such inspection is
-    needed when no imaginary frequency remains.)
+    threshold is applied.  (This strict criterion enables automatic classification without
+    case-by-case decisions about whether small imaginary frequencies
+    are acceptable.)
 
     File management reflects the calculation outcome.  Conformers that
     converge without imaginary frequencies have their .gjf, .log, and
@@ -45,11 +44,11 @@ Description:
     target list for manual resubmission.  With --infile-gaussian-recalc, the
     molecules whose Gaussian jobs terminated abnormally and those whose
     imaginary frequencies could not be removed (confid = 0 in the output .csv
-    file of a previous run) are extracted automatically and recalculated
-    together, e.g., with different opt options.  (With --infolder-gjf, file
-    names consisting of digits with leading zeros, e.g., 001, are not
-    supported for this recalculation, because such identifiers are read back
-    from the .csv file as numbers.)
+    file of a previous run) are extracted automatically and recalculated from their original
+    input structures, e.g., with different opt options.  (With --infolder-gjf, file
+    names consisting only of digits with leading zeros, e.g., 001, are not
+    supported for this recalculation, because pandas may interpret them as 
+    numeric identifiers, causing incorrect ID matching.)
 
     Output .csv file (gaussian_<suffix>_stats.csv).  One row is written per
     molecule (or conformer), and the file is updated after each molecule; empty cells denote
