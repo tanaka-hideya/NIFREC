@@ -14,6 +14,7 @@ import cclib
 from pathlib import Path
 from cclib.parser.utils import convertor
 from nifrec import __version__
+from nifrec.nifrec_gaussian_optfreq import final_energy # same energy selection as in the opt freq step
 
 # Integer columns of the input .csv file (kept as integers in the output .csv file)
 INT_COLUMNS = ['confid', 'charge', 'multiplicity', 'success_stage', 'success_disploop', 'fail_stage',
@@ -26,7 +27,7 @@ def gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo):
     results = {'is_success': False,
                 'functional': None,
                 'basis_set': None,
-                'E_scf_final': None,
+                'E_final': None,
                 'zpve': None,
                 'Ezero': None,
                 'H': None,
@@ -60,9 +61,10 @@ def gaussian_analyze(infd, number, smiles, glogfd, filepath, no_homo_lumo):
         if data.metadata['success'] and data.optdone:
             results['is_success'] = True
 
-        results['E_scf_final'] = convertor(data.scfenergies[-1], 'eV', 'hartree') # cclib stores energies in eV
+        energy, _ = final_energy(data) # coupled cluster > Moller-Plesset > SCF (eV; cclib stores energies in eV)
+        results['E_final'] = convertor(energy, 'eV', 'hartree')
         results['zpve'] = data.zpve
-        results['Ezero'] = results['E_scf_final'] + results['zpve']
+        results['Ezero'] = results['E_final'] + results['zpve']
         results['H'] = data.enthalpy
         results['G'] = data.freeenergy
         results['T'] = data.temperature
@@ -129,7 +131,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
             status_dict[number] = {**df.loc[number].to_dict(),
                                     'functional': results_dict['functional'],
                                     'basis_set': results_dict['basis_set'],
-                                    'Final_SCF_Energy_hartree': results_dict['E_scf_final'],
+                                    'Final_Electronic_Energy_hartree': results_dict['E_final'],
                                     'Zero_point_correction_hartree': results_dict['zpve'],
                                     'Sum_of_electronic_and_zero_point_Energies_hartree': results_dict['Ezero'],
                                     'Sum_of_electronic_and_thermal_Enthalpies_hartree': results_dict['H'],
@@ -142,7 +144,7 @@ def process_rows_for_gparse(infd, glogfd, infile, outfile, no_homo_lumo):
                                     'confid': 0,
                                     'functional': results_dict['functional'],
                                     'basis_set': results_dict['basis_set'],
-                                    'Final_SCF_Energy_hartree': results_dict['E_scf_final'],
+                                    'Final_Electronic_Energy_hartree': results_dict['E_final'],
                                     'Zero_point_correction_hartree': results_dict['zpve'],
                                     'Sum_of_electronic_and_zero_point_Energies_hartree': results_dict['Ezero'],
                                     'Sum_of_electronic_and_thermal_Enthalpies_hartree': results_dict['H'],
