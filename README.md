@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/990414067.svg)](https://zenodo.org/badge/latestdoi/990414067)
 
-NIFREC (No Imaginary Frequencies) is an automated workflow for local-minimum geometry optimization that includes an automated protocol to eliminate imaginary frequencies. NIFREC supports the sequential execution of conformer searches and quantum-chemical calculations across molecular datasets, automatically resolving imaginary frequencies at each stage of the workflow.  
+NIFREC is an automated workflow for local-minimum geometry optimization that includes an automated protocol to eliminate imaginary frequencies. NIFREC supports the sequential execution of conformer searches and quantum-chemical calculations across molecular datasets, automatically addressing imaginary frequencies at each stage of the workflow.  
 NIFREC provides tools to generate conformers (RDKit); optimize geometries and analyze vibrational frequencies (xTB); run Gaussian optimization and frequency (opt+freq) jobs with robust imaginary-frequency remediation; and parse Gaussian results.
 
 Version: 2.0.0
@@ -146,7 +146,7 @@ Requires Gaussian 16. The route section is built as: "#p theory-level opt freq=n
 nifrec-gaussian-optfreq --outfolder-gaussian gaussian_optfreq_PM6 --infolder-xtb xtb --suffix optfreq_PM6 --theory-level PM6 --nproc 8 --mem 32
 ```
 
-Options: `--skip-stage1` (go directly from Stage 0 to Stage 2), `--disp-vec {largest,sum}` and `--reverse-disp` (construction and sign of the Stage 2 displacement vector), `--infolder-gjf` (read the charge, multiplicity, and coordinates from Gaussian input files instead of the xTB results), and `--infile-gaussian-recalc` (recalculate the molecules that failed in a previous run). The three-stage remediation procedure, all options, and the columns of the output CSV file are described in `nifrec-gaussian-optfreq --help`.
+Options: `--skip-stage1` (go directly from Stage 0 to Stage 2), `--disp-vec {largest,sum}` and `--reverse-disp` (construction and sign of the Stage 2 displacement vector), `--infolder-gjf` (read the charge, multiplicity, and coordinates from Gaussian input files instead of the xTB results), and `--infile-gaussian-recalc` (recalculate the molecules recorded with confid = 0 in the output CSV file of a previous run, i.e., those whose Gaussian jobs terminated abnormally and those whose imaginary frequencies could not be removed). The three-stage remediation procedure, all options, and the columns of the output CSV file are described in `nifrec-gaussian-optfreq --help`.
 
 Key outputs
 - ./gaussian_optfreq_PM6/gaussian_gjf_optfreq_PM6, ./gaussian_optfreq_PM6/gaussian_log_optfreq_PM6, ./gaussian_optfreq_PM6/gaussian_chk_optfreq_PM6: artifacts from successful runs
@@ -171,7 +171,7 @@ Notes
 
 ## Testing
 
-The tests (pytest) run the workflow on a few small molecules and check the consistency of the outputs. They use the same programs as the workflow (xTB and, for the Gaussian step, Gaussian 16); tests whose program is not available are skipped. Run them from the repository root (pytest is included in the conda environment above):
+The tests (pytest) cover the Gaussian step and require Gaussian 16. Run them from the repository root (pytest is included in the conda environment above):
 
 ```bash
 python -m pytest
@@ -179,7 +179,7 @@ python -m pytest
 
 ## Tips and troubleshooting
 - Unique identifiers: The index column specified by --idxcol must uniquely identify molecules; it is used in filenames and CSV indices.
-- Parallelism: The RDKit and xTB steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1). The Gaussian step processes molecules sequentially; use --nproc to set the number of cores per Gaussian job.
+- Parallelism: The RDKit and xTB steps support parallel execution. Use --njobs to control the number of workers (negative values use CPU cores - 1). The Gaussian step processes molecules sequentially; --nproc sets %nprocshared of each Gaussian job.
 - Output folders: Each step creates its output folder with the exact path you specify; if the folder already exists, creation may fail. Use a fresh path or remove the existing directory before rerunning.
 - Dots in paths: Avoid `.` in `--outfolder-rdkit` (and in the current directory for relative paths). Per-conformer XYZ export may split the output path at the first dot and write files to an unexpected location.
 
