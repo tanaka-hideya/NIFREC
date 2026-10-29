@@ -1,4 +1,4 @@
-"""NIFREC: automated local-minimum geometry optimization with no imaginary vibrational frequencies."""
+"""NIFREC: A Gaussian-Integrated Automated Workflow for Local-Minimum Geometry Optimization with No Imaginary Frequencies"""
 
 from importlib.metadata import PackageNotFoundError, version
 

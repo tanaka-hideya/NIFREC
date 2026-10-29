@@ -12,5 +12,6 @@ dependencies:
 - morfeus-ml=0.7.2
 - ase=3.29.0
 - py-cpuinfo=9.0.0
+- pytest>=8
 - xtb=6.7.1
 - setuptools<81

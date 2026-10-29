@@ -11,7 +11,7 @@ authors:
     given-names: Tomoyuki
     orcid: https://orcid.org/0000-0002-8769-2702
     affiliation: Nara Institute of Science and Technology
-title: NIFREC
+title: "NIFREC: A Gaussian-Integrated Automated Workflow for Local-Minimum Geometry Optimization with No Imaginary Frequencies"
 version: 2.0.0
 doi: 10.5281/zenodo.17299289
 repository-code: https://github.com/tanaka-hideya/NIFREC

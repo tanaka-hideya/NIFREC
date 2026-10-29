@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nifrec"
 version = "2.0.0"
-description = "NIFREC: an automated workflow for local-minimum molecular geometry optimization that incorporates an automated protocol for the elimination of imaginary frequencies (RDKit, xTB, Gaussian, and parsing)."
+description = "NIFREC: A Gaussian-Integrated Automated Workflow for Local-Minimum Geometry Optimization with No Imaginary Frequencies"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.13,<3.14"
 license = { file = "LICENSE" }
@@ -55,10 +55,6 @@ dependencies = [
 # Prefer conda-forge for RDKit if you encounter platform issues.
 chem = [
   "rdkit==2025.9.*"
-]
-# Test dependencies (run the test suite with: python -m pytest)
-test = [
-  "pytest>=8"
 ]
 # xTB is a compiled codebase typically provided via conda (conda-forge::xtb)
 # or system package managers. It is intentionally not specified as a PyPI
