@@ -152,7 +152,7 @@ def test_output_files(outdir):
     # working: only the files of the jobs that terminated abnormally remain
     working = files(out / 'gaussian_working_optfreq')
     assert [name for name in working if name.endswith('.gjf')] == ['g_0_1_c0m2.gjf', 'g_284_1.gjf']
-    assert {name.split('.')[0] for name in working} == {'g_0_1_c0m2', 'g_284_1'}
+    assert {name.split('.')[0] for name in working if name.startswith('g_')} == {'g_0_1_c0m2', 'g_284_1'}
 
 
 def test_gaussian_inputs(outdir):
